@@ -5,7 +5,20 @@ pygtk.require('2.0')
 import gtk
 import gtk.glade
 import gobject
-import os, sys
+import os, sys, socket, struct
+
+IPV6 = socket.has_ipv6
+
+print "IPv6", IPV6
+
+SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
+if IPV6:
+	CAST_IP = 'ff05::1'
+else:
+	CAST_IP = '<broadcast>'
+	#CAST_IP = '255.255.255.255'
+	#CAST_IP = '224.0.0.1'
+
 
 def resource(fn):
 	if os.path.exists(os.path.join('/usr/lib/subim', fn)):
@@ -16,25 +29,49 @@ def resource(fn):
 _hostname = None
 def getHost():
 	global _hostname
-	if _hostname is not None:
-		return _hostname
-	if 'win' in sys.platform.lower():
-		print "FIXME: Implement getHost() on windows!"
-		_hostname = "None"
-		return "None"
-	else:
-		f = file('/etc/hostname', 'r')
-		rv = f.readline()
-		f.close()
-		_hostname = rv.strip()
-		return rv.strip()
+	if _hostname is None:
+		_hostname = socket.gethostname()
+	return _hostname
 
 def getColorForUser(user):
 	return 'red'
 
+HEADER_FORMAT = "!HL"
+ARGUMENT_FORMAT = "!L"
+
+CMD_MESSAGE = 0
+CMD_USER_JOIN = 1
+CMD_USER_PART = 2
+
 class Protocol(object):
+	sock = None
+	
+	def __init__(self):
+		self.sock = socket.socket(socket.AF_INET6 if IPV6 else socket.AF_INET, socket.SOCK_DGRAM)
+		self.sock.connect((CAST_IP, SUBIM_PORT))
+	
+	def __readHeader(self):
+		l = struct.calcsize(HEADER_FORMAT)
+		d = self.sock.read(l)
+		cmd, ulen = struct.unpack(HEADER_FORMAT, d)
+		user = self.sock.read(ulen)
+		return cmd, user
+	
+	def __readArgument(self):
+		l = struct.calcsize(ARGUMENT_FORMAT)
+		d = self.sock.read(l)
+		ulen, = struct.unpack(ARGUMENT_FORMAT, d)
+		data = self.sock.read(ulen)
+		return data
+	
 	def sendMessage(self, msg):
 		print "Protocol.sendMessage", msg
+		user = getHost()
+		data = struct(HEADER_FORMAT, CMD_MESSAGE, len(user))
+		data += user
+		data += struct(ARGUMENT_FORMAT, len(msg))
+		data += msg
+		self.sock.sendall(data)
 	
 	def recieveMessage(self, user, msg):
 		print "Protocol.recieveMessage", user, msg
@@ -74,9 +111,12 @@ class MainWindow(object):
 	
 	def sendMessage(self, *p, **kw):
 		print "TODO: sendMessage", p, kw
+		protocol.sendMessage(self.getMessageText())
 		self.addMessage(getHost(), self.getMessageText())
+		# Clear the input
 		buf = self._msg.get_buffer()
 		buf.delete(*buf.get_bounds())
+		# Scroll to the bottom
 		va = self.xml.get_widget('swHistory').get_vadjustment()
 		va.set_value(va.upper)
 	
