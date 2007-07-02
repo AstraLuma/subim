@@ -9,24 +9,17 @@ import gtk.glade
 import gobject
 import os, sys, socket, struct
 
-IPV6 = socket.has_ipv6
-#IPV6 = False
-print "IPv6", socket.has_ipv6, IPV6
+# The IPv4 multicast group is 224.0.0.0/4
+# The mcast.py demo uses 225.0.0.250, which is part of a reserved block
+# The link scope is 239.255.0.0/16, the organization scope is 239.192.0.0/14
+# I'm going to use the latter, with the last 2 bytes being map(ord, 'SI')
+SUBIM_GROUP = '239.192.83.73'
+# Set this to the number of hops packets can take. 1 is fine for most homes,
+# Organizations or other more complex setups may need higher numbers.
+SUBIM_TTL = 1
 
+# Change this to 8123 to test with mcast.py found in the Python demos
 SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
-if IPV6:
-	CAST_IP = 'ff05::1'
-else:
-	CAST_IP = '<broadcast>'
-	#CAST_IP = '255.255.255.255'
-	#CAST_IP = '224.0.0.1'
-
-
-def resource(fn):
-	if os.path.exists(os.path.join('/usr/lib/subim', fn)):
-		return os.path.join('/usr/lib/subim', fn)
-	else:
-		return fn
 
 _hostname = None
 def getHost():
@@ -35,8 +28,41 @@ def getHost():
 		_hostname = unicode(socket.gethostname())
 	return _hostname
 
-def getColorForUser(user):
-	return 'red'
+
+# Open a UDP socket, bind it to a port and select a multicast group
+def openmcastsock(group, port):
+	"""
+	Open a UDP socket, bind it to a port and select a multicast group
+	Borrowed from the Python demos.
+	"""
+	#
+	# Create a socket
+	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	#
+	# Allow multiple copies of this program on one machine
+	# (not strictly needed)
+	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	#
+	# Bind it to the port
+	s.bind(('', port))
+	#
+	# Look up multicast group address in name server
+	# (doesn't hurt if it is already in ddd.ddd.ddd.ddd format)
+	group = socket.gethostbyname(group)
+	#
+	# Construct binary group address
+	bytes = map(int, group.split("."))
+	grpaddr = 0
+	for byte in bytes: grpaddr = (grpaddr << 8) | byte
+	#
+	# Construct struct mreq from grpaddr and ifaddr
+	ifaddr = socket.INADDR_ANY
+	mreq = struct.pack('ll', socket.htonl(grpaddr), socket.htonl(ifaddr))
+	#
+	# Add group membership
+	s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+	#
+	return s
 
 HEADER_FORMAT = "!HL"
 ARGUMENT_FORMAT = "!L"
@@ -54,8 +80,10 @@ class Protocol(object):
 	msgers = []
 	
 	def __init__(self):
-		self.sock = socket.socket(socket.AF_INET6 if IPV6 else socket.AF_INET, socket.SOCK_DGRAM)
-		self.sock.connect((CAST_IP, SUBIM_PORT))
+		self.sock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
+		ttl = struct.pack('b', SUBIM_TTL) # Time-to-live
+		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+		self.sock.connect((SUBIM_GROUP, SUBIM_PORT))
 	
 	def __encode(self, uni):
 		return unicode(uni).encode('utf8', 'ignore') # We really shouldn't get anything
@@ -81,7 +109,7 @@ class Protocol(object):
 		args = map(unicode, args)
 		print "Protocol.__send", cmd, args
 		user = unicode(getHost()).encode('utf8', 'ignore')
-		data = struct.pack(HEADER_FORMAT, CMD_MESSAGE, len(user))
+		data = struct.pack(HEADER_FORMAT, cmd, len(user))
 		data += user
 		for a in args:
 			d = self.__encode(a)
@@ -111,6 +139,7 @@ class Protocol(object):
 	def listUsers(self):
 		print "Protocol.listUsers"
 		self.userJoin(getHost())
+		self.__send(CMD_LIST_USERS)
 	
 	def join(self):
 		print "Protocol.join"
@@ -127,6 +156,15 @@ class Protocol(object):
 	
 	def __exit__(self, exc_type, exc_value, traceback):
 		self.part()
+
+def getColorForUser(user):
+	return 'red'
+
+def resource(fn):
+	if os.path.exists(os.path.join('/usr/lib/subim', fn)):
+		return os.path.join('/usr/lib/subim', fn)
+	else:
+		return fn
 
 class MainWindow(object):
 	def __init__(self, fn):
