@@ -1,0 +1,89 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import pygtk
+pygtk.require('2.0')
+import gtk
+import gtk.glade
+import gobject
+import os, sys
+
+def resource(fn):
+	if os.path.exists(os.path.join('/usr/lib/subim', fn)):
+		return os.path.join('/usr/lib/subim', fn)
+	else:
+		return fn
+
+_hostname = None
+def getHost():
+	global _hostname
+	if _hostname is not None:
+		return _hostname
+	if 'win' in sys.platform.lower():
+		print "FIXME: Implement getHost() on windows!"
+		_hostname = "None"
+		return "None"
+	else:
+		f = file('/etc/hostname', 'r')
+		rv = f.readline()
+		f.close()
+		_hostname = rv.strip()
+		return rv.strip()
+
+def getColorForUser(user):
+	return 'red'
+
+class MainWindow(object):
+	def __init__(self, fn):
+		self.xml = gtk.glade.XML(fn, 'wSubIM')
+		self.xml.signal_autoconnect(self)
+		self._win = self.xml.get_widget('wSubIM')
+		self._msg = self.xml.get_widget('tvMessage')
+		self._hist = self.xml.get_widget('tvHistory')
+		self.umodel = gtk.ListStore(gobject.TYPE_STRING)
+		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
+		self._users = self.xml.get_widget('tvUsers')
+		self._users.set_model(self.umodel)
+	
+	def winDelete(self, widget, event):
+		print "winDelete", widget, event
+		gtk.main_quit(0)
+	
+	def present(self):
+		self._win.present()
+	
+	def getMessageText(self):
+		buf = self._msg.get_buffer()
+		return buf.get_text(*buf.get_bounds())
+	
+	def sendMessage(self, *p, **kw):
+		print "TODO: sendMessage", p, kw
+		self.addMessage(getHost(), self.getMessageText())
+		buf = self._msg.get_buffer()
+		buf.delete(*buf.get_bounds())
+		va = self.xml.get_widget('swHistory').get_vadjustment()
+		va.set_value(va.upper)
+	
+	def addUser(self, userName):
+		print "TODO: addUser", userName
+		print "addUser:append", self.umodel.append([userName])
+	
+	def rmUser(self, userName):
+		print "TODO: rmUser", userName
+	
+	_first = True
+	def addMessage(self, user, msg):
+		buf = self._hist.get_buffer()
+		if not self._first:
+			buf.insert(buf.get_bounds()[1], "\n")
+		self._first = False
+		ut = buf.create_tag(foreground=getColorForUser(user))
+		buf.insert_with_tags(buf.get_bounds()[1], user+":", ut)
+		buf.insert(buf.get_bounds()[1], " "+msg.strip())
+	
+
+if __name__ == '__main__':
+	app = MainWindow(resource('subim.glade'))
+	print repr(app)
+	app.present()
+	app.addUser(getHost())
+	gtk.main()
