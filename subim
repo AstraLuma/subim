@@ -3,13 +3,14 @@
 import pygtk
 pygtk.require('2.0')
 import gtk
+gtk.threads_init()
 import gtk.glade
 import gobject
 import os, sys, socket, struct
 
-IPV6 = socket.has_ipv6
-
-print "IPv6", IPV6
+#IPV6 = socket.has_ipv6
+IPV6 = False
+print "IPv6", socket.has_ipv6, IPV6
 
 SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
 if IPV6:
@@ -84,6 +85,14 @@ class Protocol(object):
 	
 	def listUsers(self):
 		print "Protocol.listUsers"
+	
+	def join(self):
+		print "Protocol.join"
+		self.userJoin(getHost())
+	
+	def part(self):
+		print "Protocol.part"
+		pass
 
 class MainWindow(object):
 	def __init__(self, fn):
@@ -151,10 +160,9 @@ if __name__ == '__main__':
 	print repr(app)
 	protocol = Protocol()
 	# FIXME: Add event handlers
+	protocol.join()
 	protocol.listUsers()
-	app.addUser(getHost())
-	app.addUser(getHost())
-	app.addUser(getHost())
-	
 	app.present()
 	gtk.main()
+	protocol.part()
+
