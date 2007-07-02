@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+from __future__ import with_statement
 import pygtk
 pygtk.require('2.0')
 import gtk
@@ -8,8 +9,8 @@ import gtk.glade
 import gobject
 import os, sys, socket, struct
 
-#IPV6 = socket.has_ipv6
-IPV6 = False
+IPV6 = socket.has_ipv6
+#IPV6 = False
 print "IPv6", socket.has_ipv6, IPV6
 
 SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
@@ -31,7 +32,7 @@ _hostname = None
 def getHost():
 	global _hostname
 	if _hostname is None:
-		_hostname = socket.gethostname()
+		_hostname = unicode(socket.gethostname())
 	return _hostname
 
 def getColorForUser(user):
@@ -41,58 +42,91 @@ HEADER_FORMAT = "!HL"
 ARGUMENT_FORMAT = "!L"
 
 CMD_MESSAGE = 0
-CMD_USER_JOIN = 1
+CMD_USER_JOIN = 1 # Also used as the response for a user list request
 CMD_USER_PART = 2
+CMD_LIST_USERS = 3
 
 class Protocol(object):
 	sock = None
 	
+	joiners = []
+	parters = []
+	msgers = []
+	
 	def __init__(self):
 		self.sock = socket.socket(socket.AF_INET6 if IPV6 else socket.AF_INET, socket.SOCK_DGRAM)
 		self.sock.connect((CAST_IP, SUBIM_PORT))
+	
+	def __encode(self, uni):
+		return unicode(uni).encode('utf8', 'ignore') # We really shouldn't get anything
+	
+	def __decode(self, data):
+		return unicode(data, 'utf8', 'ignore')
 	
 	def __readHeader(self):
 		l = struct.calcsize(HEADER_FORMAT)
 		d = self.sock.read(l)
 		cmd, ulen = struct.unpack(HEADER_FORMAT, d)
 		user = self.sock.read(ulen)
-		return cmd, user
+		return cmd, self.__decode(user)
 	
 	def __readArgument(self):
 		l = struct.calcsize(ARGUMENT_FORMAT)
 		d = self.sock.read(l)
 		ulen, = struct.unpack(ARGUMENT_FORMAT, d)
 		data = self.sock.read(ulen)
-		return data
+		return self.__decode(data)
+	
+	def __send(self, cmd, *args):
+		args = map(unicode, args)
+		print "Protocol.__send", cmd, args
+		user = unicode(getHost()).encode('utf8', 'ignore')
+		data = struct.pack(HEADER_FORMAT, CMD_MESSAGE, len(user))
+		data += user
+		for a in args:
+			d = self.__encode(a)
+			data += struct.pack(ARGUMENT_FORMAT, len(d))
+			data += d
+		self.sock.sendall(data)
 	
 	def sendMessage(self, msg):
 		print "Protocol.sendMessage", msg
-		user = getHost()
-		data = struct(HEADER_FORMAT, CMD_MESSAGE, len(user))
-		data += user
-		data += struct(ARGUMENT_FORMAT, len(msg))
-		data += msg
-		self.sock.sendall(data)
+		self.__send(CMD_MESSAGE, msg)
 	
 	def recieveMessage(self, user, msg):
 		print "Protocol.recieveMessage", user, msg
+		for c in self.msgers:
+			if callable(c): c(user, msg)
 	
 	def userJoin(self, user):
 		print "Protocol.userJoin", user
+		for c in self.joiners:
+			if callable(c): c(user)
 	
 	def userPart(self, user):
 		print "Protocol.userPart", user
+		for c in self.parters:
+			if callable(c): c(user)
 	
 	def listUsers(self):
 		print "Protocol.listUsers"
+		self.userJoin(getHost())
 	
 	def join(self):
 		print "Protocol.join"
 		self.userJoin(getHost())
+		self.__send(CMD_USER_JOIN)
 	
 	def part(self):
 		print "Protocol.part"
-		pass
+		self.__send(CMD_USER_PART)
+		self.userPart(getHost())
+	
+	def __enter__(self):
+		self.join()
+	
+	def __exit__(self, exc_type, exc_value, traceback):
+		self.part()
 
 class MainWindow(object):
 	def __init__(self, fn):
@@ -102,6 +136,7 @@ class MainWindow(object):
 		self._msg = self.xml.get_widget('tvMessage')
 		self._hist = self.xml.get_widget('tvHistory')
 		self._users = self.xml.get_widget('tvUsers')
+		self._users.append_column(gtk.TreeViewColumn('User', gtk.CellRendererText(), text=0))
 		self._users.set_model(gtk.ListStore(str))
 		self.umodel = self._users.get_model()
 		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
@@ -116,10 +151,12 @@ class MainWindow(object):
 	
 	def getMessageText(self):
 		buf = self._msg.get_buffer()
-		return buf.get_text(*buf.get_bounds())
+		rv = buf.get_text(*buf.get_bounds())
+		print "getMessageText:rv", type(rv), repr(rv)
+		return unicode(rv, 'utf8', 'ignore')
 	
 	def sendMessage(self, *p, **kw):
-		print "TODO: sendMessage", p, kw
+		print "sendMessage", p, kw
 		protocol.sendMessage(self.getMessageText())
 		self.addMessage(getHost(), self.getMessageText())
 		# Clear the input
@@ -130,17 +167,17 @@ class MainWindow(object):
 		va.set_value(va.upper)
 	
 	def addUser(self, userName):
-		print "TODO: addUser", userName
+		print "FIXME: addUser", userName
+		if [userName] in self.umodel: return
 		i = self.umodel.append([userName])
 		print "addUser:i", self.umodel.get_path(i)
-		self._users.sensitive = True
+		assert self._users.get_model() is self.umodel
 		print "addUser:model", map(list,self.umodel)
-		print "addUser:sense", self._users.get_model(), self.umodel
 	
-	def rmUser(self, user):
-		print "TODO: rmUser", userName
+	def rmUser(self, userName):
+		print "FIXME: rmUser", userName
 		for i in range(0, len(self.umodel)):
-			if self.umodel[i][0] == user:
+			if self.umodel[i][0] == userName:
 				del self.umodel[i]
 				return
 	
@@ -159,10 +196,23 @@ if __name__ == '__main__':
 	app = MainWindow(resource('subim.glade'))
 	print repr(app)
 	protocol = Protocol()
-	# FIXME: Add event handlers
-	protocol.join()
-	protocol.listUsers()
-	app.present()
-	gtk.main()
-	protocol.part()
+	
+	def msgRecv(user, msg):
+		global app
+		app.addMessage(user, msg)
+	def userJoined(user):
+		global app
+		app.addUser(user)
+	def userParted(user):
+		global app
+		app.rmUser(user)
+	
+	protocol.joiners.append(userJoined)
+	protocol.parters.append(userParted)
+	protocol.msgers.append(msgRecv)
+	
+	with protocol:
+		protocol.listUsers()
+		app.present()
+		gtk.main()
 
