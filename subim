@@ -32,6 +32,22 @@ def getHost():
 def getColorForUser(user):
 	return 'red'
 
+class Protocol(object):
+	def sendMessage(self, msg):
+		print "Protocol.sendMessage", msg
+	
+	def recieveMessage(self, user, msg):
+		print "Protocol.recieveMessage", user, msg
+	
+	def userJoin(self, user):
+		print "Protocol.userJoin", user
+	
+	def userPart(self, user):
+		print "Protocol.userPart", user
+	
+	def listUsers(self):
+		print "Protocol.listUsers"
+
 class MainWindow(object):
 	def __init__(self, fn):
 		self.xml = gtk.glade.XML(fn, 'wSubIM')
@@ -39,10 +55,11 @@ class MainWindow(object):
 		self._win = self.xml.get_widget('wSubIM')
 		self._msg = self.xml.get_widget('tvMessage')
 		self._hist = self.xml.get_widget('tvHistory')
-		self.umodel = gtk.ListStore(gobject.TYPE_STRING)
-		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
 		self._users = self.xml.get_widget('tvUsers')
-		self._users.set_model(self.umodel)
+		self._users.set_model(gtk.ListStore(str))
+		self.umodel = self._users.get_model()
+		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
+		self._users.sensitive = True
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
@@ -65,10 +82,18 @@ class MainWindow(object):
 	
 	def addUser(self, userName):
 		print "TODO: addUser", userName
-		print "addUser:append", self.umodel.append([userName])
+		i = self.umodel.append([userName])
+		print "addUser:i", self.umodel.get_path(i)
+		self._users.sensitive = True
+		print "addUser:model", map(list,self.umodel)
+		print "addUser:sense", self._users.get_model(), self.umodel
 	
-	def rmUser(self, userName):
+	def rmUser(self, user):
 		print "TODO: rmUser", userName
+		for i in range(0, len(self.umodel)):
+			if self.umodel[i][0] == user:
+				del self.umodel[i]
+				return
 	
 	_first = True
 	def addMessage(self, user, msg):
@@ -84,6 +109,12 @@ class MainWindow(object):
 if __name__ == '__main__':
 	app = MainWindow(resource('subim.glade'))
 	print repr(app)
-	app.present()
+	protocol = Protocol()
+	# FIXME: Add event handlers
+	protocol.listUsers()
 	app.addUser(getHost())
+	app.addUser(getHost())
+	app.addUser(getHost())
+	
+	app.present()
 	gtk.main()
