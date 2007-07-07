@@ -12,16 +12,16 @@ import os, sys, socket, struct, threading
 # The IPv4 multicast group is 224.0.0.0/4
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
 # The link scope is 239.255.0.0/16, the organization scope is 239.192.0.0/14
-# I'm going to use the latter, with the last 2 bytes being map(ord, 'SI'),
-# or 239.192.83.73
-SUBIM_GROUP = '239.192.83.73'
+# I'm going to use the former, with the last 2 bytes being map(ord, 'SI'),
+# or 239.255.83.73
+SUBIM_GROUP = '239.255.83.73'
 # Set this to the number of hops packets can take. 1 is fine for most homes,
 # Organizations or other more complex setups may need higher numbers.
 SUBIM_TTL = 3
 
 # Change this to 8123 to test with mcast.py found in the Python demos
 # 5349 = map(hex, map(ord, 'SI')), SI = SubIM, = 5349
-SUBIM_PORT = 5349
+SUBIM_PORT = 8123
 
 _hostname = None
 def getHost():
@@ -178,6 +178,7 @@ class Protocol(object):
 			self.COMMANDS[cmd](self, user, *args)
 	
 	def readForever(self):
+		print "Start reading"
 		while True:
 			self.readOne()
 	
