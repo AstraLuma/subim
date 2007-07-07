@@ -176,7 +176,7 @@ class Protocol(object):
 		d = d[ulen:]
 		args = []
 		alen = struct.calcsize(ARGUMENT_FORMAT)
-		while len(d) > alen:
+		while len(d) >= alen:
 			l, = struct.unpack(ARGUMENT_FORMAT, d[:alen])
 			d = d[alen:]
 			args.append(self.__decode( d[:l] ))
@@ -296,14 +296,12 @@ class MainWindow(object):
 		# Clear the input
 		buf = self._msg.get_buffer()
 		buf.delete(*buf.get_bounds())
-		# Scroll to the bottom
-		va = self.xml.get_widget('swHistory').get_vadjustment()
-		va.set_value(va.upper)
 	
 	def addUser(self, userName):
 		print "addUser", userName
 		if userName not in self.userlist:
 			self.userlist.append(userName)
+			self.addNotice(userName, "joined")
 			i = self.umodel.append([userName])
 			assert self._users.get_model() is self.umodel
 	
@@ -312,10 +310,30 @@ class MainWindow(object):
 		if userName in self.userlist:
 			i = self.userlist.index(userName)
 			del self.userlist[i]
+			self.addNotice(userName, "left")
 			for i in range(0, len(self.umodel)):
 				if self.umodel[i][0] == userName:
 					del self.umodel[i]
 					return
+	
+	def sendMessageKey(self, widget, event):
+		if event.type != gtk.gdk.KEY_PRESS: return
+		print "sendMessageKey", hex(event.state), hex(event.keyval), event.group, repr(event.string)
+		if event.keyval == 0xFF0D or event.string == "\r":
+			if event.state & 1: #Shift
+				event.state &= ~1
+				return False # Continue processing
+			else: #Unshifted
+				self.xml.get_widget('bSend').emit("clicked")
+				return True # Stop processing
+	
+	def scrollDown(self):
+		"""
+		Scroll to the bottom of the history.
+		"""
+		#FIXME: Sometimes, this causes the text to disappear
+		va = self.xml.get_widget('swHistory').get_vadjustment()
+		va.set_value(va.upper)
 	
 	def getTime(self):
 		#FIXME: Hide the microseconds
@@ -330,6 +348,7 @@ class MainWindow(object):
 		ut = buf.create_tag(foreground=getColorForUser(user))
 		buf.insert_with_tags(buf.get_bounds()[1], self.getTime()+user+":", ut)
 		buf.insert(buf.get_bounds()[1], " "+msg.strip())
+		self.scrollDown()
 	
 	def addNotice(self, user, msg):
 		"""
@@ -340,7 +359,8 @@ class MainWindow(object):
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
 		ut = buf.create_tag(weight=pango.WEIGHT_BOLD)
-		buf.insert_with_tags(buf.get_bounds()[1], self.getTime()+user+": "+msg.strip(), ut)
+		buf.insert_with_tags(buf.get_bounds()[1], self.getTime()+user+" "+msg.strip(), ut)
+		self.scrollDown()
 	
 
 if __name__ == '__main__':
