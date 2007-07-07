@@ -4,7 +4,7 @@ from __future__ import with_statement
 import pygtk
 pygtk.require('2.0')
 import gtk
-gtk.threads_init()
+gtk.gdk.threads_init()
 import gtk.glade
 import gobject
 import os, sys, socket, struct, threading
@@ -21,7 +21,7 @@ SUBIM_TTL = 3
 
 # Change this to 8123 to test with mcast.py found in the Python demos
 # 5349 = map(hex, map(ord, 'SI')), SI = SubIM, = 5349
-SUBIM_PORT = 8123
+SUBIM_PORT = 5349
 
 _hostname = None
 def getHost():
@@ -88,30 +88,19 @@ class Protocol(object):
 	msgers = []
 	
 	def __init__(self):
-		self.sock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
+		# Sending stuff
+		self.ssock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
 		ttl = struct.pack('b', SUBIM_TTL) # Time-to-live
-		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-		self.sock.connect((SUBIM_GROUP, SUBIM_PORT))
+		self.ssock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+		# Receiving stuff
+		self.rsock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
+		#self.rsock.connect(('', SUBIM_PORT))
 	
 	def __encode(self, uni):
 		return unicode(uni).encode('utf8', 'ignore') # We really shouldn't get anything
 	
 	def __decode(self, data):
 		return unicode(data, 'utf8', 'ignore')
-	
-	def __readHeader(self):
-		l = struct.calcsize(HEADER_FORMAT)
-		d = self.sock.recv(l, socket.MSG_WAITALL)
-		cmd, ulen = struct.unpack(HEADER_FORMAT, d)
-		user = self.sock.recv(ulen, socket.MSG_WAITALL)
-		return cmd, self.__decode(user)
-	
-	def __readArgument(self):
-		l = struct.calcsize(ARGUMENT_FORMAT)
-		d = self.sock.recv(l, socket.MSG_WAITALL)
-		ulen, = struct.unpack(ARGUMENT_FORMAT, d)
-		data = self.sock.recv(ulen, socket.MSG_WAITALL)
-		return self.__decode(data)
 	
 	def __send(self, cmd, *args):
 		args = map(unicode, args)
@@ -123,7 +112,7 @@ class Protocol(object):
 			d = self.__encode(a)
 			data += struct.pack(ARGUMENT_FORMAT, len(d))
 			data += d
-		self.sock.sendall(data)
+		self.ssock.sendto(data, (SUBIM_GROUP, SUBIM_PORT))
 	
 	def sendMessage(self, msg):
 		print "Protocol.sendMessage", msg
@@ -169,18 +158,39 @@ class Protocol(object):
 		CMD_LIST_USERS : __reply2list,
 	}
 	
-	def readOne(self):
-		cmd, user = self.__readHeader()
+	def __readPacket(self):
+		dlen = struct.calcsize(HEADER_FORMAT)
+		d,src = self.rsock.recvfrom(4096)
+		print "__readPacket:", repr(d),src
+		cmd, ulen = struct.unpack(HEADER_FORMAT, d[:dlen])
+		d = d[dlen:]
+		user = self.__decode(d[:ulen])
+		d = d[ulen:]
 		args = []
-		if cmd in NUM_ARGS:
-			args = [self.__readArgument() for i in range(NUM_ARGS[cmd])]
+		alen = struct.calcsize(ARGUMENT_FORMAT)
+		while len(d) > alen:
+			l, = struct.unpack(ARGUMENT_FORMAT, d[:alen])
+			d = d[alen:]
+			args.append(self.__decode( d[:l] ))
+			d = d[l:]
+		if len(d):
+			print "Warning: Leftover data: ", repr(d)
+		return src, cmd, user, args
+	
+	def readOne(self):
+		src, cmd, user, args = self.__readPacket()
+		print "readOne:", src, cmd, user, args
 		if cmd in self.COMMANDS:
 			self.COMMANDS[cmd](self, user, *args)
 	
 	def readForever(self):
 		print "Start reading"
 		while True:
-			self.readOne()
+			try:
+				self.readOne()
+			except:
+				import traceback
+				traceback.print_exc()
 	
 	def startReading(self):
 		t = threading.Thread(target=self.readForever, name="SocketReader")
@@ -233,7 +243,6 @@ class MainWindow(object):
 	def sendMessage(self, *p, **kw):
 		print "sendMessage", p, kw
 		protocol.sendMessage(self.getMessageText())
-		self.addMessage(getHost(), self.getMessageText())
 		# Clear the input
 		buf = self._msg.get_buffer()
 		buf.delete(*buf.get_bounds())
