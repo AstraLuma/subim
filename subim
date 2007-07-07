@@ -263,18 +263,34 @@ def resource(fn):
 		return fn
 
 class MainWindow(object):
+	def __listWidgets(self, root):
+		"""
+		Grabs the names of all the widgets and sets a property to that name.
+		"""
+		if not hasattr(root, 'get_children'): return
+		for c in root.get_children():
+			n = gtk.glade.get_widget_name(c)
+			if n is None: 
+				print "Not a Glade widget:", c
+				continue # Wasn't an XML child
+			setattr(self, n, c)
+			self.__listWidgets(c)
+	
+	__initPanes = False
 	def __init__(self, fn):
-		self.xml = gtk.glade.XML(fn, 'wSubIM')
-		self.xml.signal_autoconnect(self)
-		self._win = self.xml.get_widget('wSubIM')
-		self._msg = self.xml.get_widget('tvMessage')
-		self._hist = self.xml.get_widget('tvHistory')
-		self._users = self.xml.get_widget('tvUsers')
-		self._users.append_column(gtk.TreeViewColumn('User', gtk.CellRendererText(), text=0))
-		self._users.set_model(gtk.ListStore(str))
-		self.umodel = self._users.get_model()
+		self._xml = gtk.glade.XML(fn, 'wSubIM')
+		self._xml.signal_autoconnect(self)
+		self.wSubIM = self._xml.get_widget('wSubIM')
+		self.__listWidgets(self.wSubIM) # Initialize all the props
+		
+		self.wSubIM.set_property('default-width', 375)
+		self.wSubIM.set_property('default-height', 500)
+		
+		self.tvUsers.append_column(gtk.TreeViewColumn('User', gtk.CellRendererText(), text=0))
+		self.tvUsers.set_model(gtk.ListStore(str))
+		self.umodel = self.tvUsers.get_model()
 		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
-		self._users.sensitive = True
+		self.tvUsers.sensitive = True
 		self.userlist = []
 	
 	def winDelete(self, widget, event):
@@ -282,10 +298,18 @@ class MainWindow(object):
 		gtk.main_quit(0)
 	
 	def present(self):
-		self._win.present()
+		self.wSubIM.present()
+		# Frankly, these two should be in the glade file
+		self.tvMessage.grab_focus()
+		self.bSend.grab_default()
+		# And the fact that I have to do this after presenting is a little ridiculous
+		if not self.__initPanes:
+			self.vpInput.set_position(self.vpInput.get_position() - 50)
+			self.hpUsers.set_position(self.hpUsers.get_position() - 75)
+			self.__initPanes = True
 	
 	def getMessageText(self):
-		buf = self._msg.get_buffer()
+		buf = self.tvMessage.get_buffer()
 		rv = buf.get_text(*buf.get_bounds())
 		print "getMessageText:rv", type(rv), repr(rv)
 		return unicode(rv, 'utf8', 'ignore')
@@ -294,7 +318,7 @@ class MainWindow(object):
 		print "sendMessage", p, kw
 		protocol.sendMessage(self.getMessageText())
 		# Clear the input
-		buf = self._msg.get_buffer()
+		buf = self.tvMessage.get_buffer()
 		buf.delete(*buf.get_bounds())
 	
 	def addUser(self, userName):
@@ -303,7 +327,7 @@ class MainWindow(object):
 			self.userlist.append(userName)
 			self.addNotice(userName, "joined")
 			i = self.umodel.append([userName])
-			assert self._users.get_model() is self.umodel
+			assert self.tvUsers.get_model() is self.umodel
 	
 	def rmUser(self, userName):
 		print "rmUser", userName
@@ -318,30 +342,34 @@ class MainWindow(object):
 	
 	def sendMessageKey(self, widget, event):
 		if event.type != gtk.gdk.KEY_PRESS: return
-		print "sendMessageKey", hex(event.state), hex(event.keyval), event.group, repr(event.string)
+		#print "sendMessageKey", hex(event.state), hex(event.keyval), event.group, repr(event.string)
 		if event.keyval == 0xFF0D or event.string == "\r":
 			if event.state & 1: #Shift
 				event.state &= ~1
 				return False # Continue processing
 			else: #Unshifted
-				self.xml.get_widget('bSend').emit("clicked")
+				#self.bSend.emit("clicked")
+				self.wSubIM.activate_default()
 				return True # Stop processing
+		elif event.keyval == 0xFF09: # Tab, for tab completion
+			pass
 	
 	def scrollDown(self):
 		"""
 		Scroll to the bottom of the history.
 		"""
 		#FIXME: Sometimes, this causes the text to disappear
-		va = self.xml.get_widget('swHistory').get_vadjustment()
+		va = self.swHistory.get_vadjustment()
 		va.set_value(va.upper)
 	
 	def getTime(self):
-		#FIXME: Hide the microseconds
-		return u"[%s] " % unicode(datetime.datetime.now())
+		dt = datetime.datetime.now()
+		dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0, dt.tzinfo)
+		return u"[%s] " % unicode(dt)
 	
 	_first = True
 	def addMessage(self, user, msg):
-		buf = self._hist.get_buffer()
+		buf = self.tvHistory.get_buffer()
 		if not self._first:
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
@@ -354,7 +382,7 @@ class MainWindow(object):
 		"""
 		Like addMessage, but for things like quit/join.
 		"""
-		buf = self._hist.get_buffer()
+		buf = self.tvHistory.get_buffer()
 		if not self._first:
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
