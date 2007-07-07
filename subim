@@ -31,6 +31,15 @@ SUBIM_PORT = 5349
 SATURATION = 1.00
 LUMINANCE = 0.40
 
+__author__ = "James Bliss <astronouth7303@gmail.com>"
+__date__ = """$Date$"""
+__version__ = """$Revision$"""
+__credits__ = """Cuog, for helping me test.
+David, for putting up with me.
+Various IRC channels, for putting up with my (sometimes n00bish) questions.
+PyGTK & Glade, for making this a little bit easier.
+"""
+
 _hostname = None
 def getHost():
 	global _hostname
@@ -278,13 +287,15 @@ class MainWindow(object):
 	
 	__initPanes = False
 	def __init__(self, fn):
-		self._xml = gtk.glade.XML(fn, 'wSubIM')
+		self._xml = gtk.glade.XML(fn)
 		self._xml.signal_autoconnect(self)
 		self.wSubIM = self._xml.get_widget('wSubIM')
 		self.__listWidgets(self.wSubIM) # Initialize all the props
+		self.mStatusPopup = self._xml.get_widget('mStatusPopup')
+		self.__listWidgets(self.mStatusPopup) # Initialize all the props
 		
-		self.wSubIM.set_property('default-width', 375)
-		self.wSubIM.set_property('default-height', 500)
+		self.wSubIM.set_icon_from_file(resource('subim.svg'))
+		self.wSubIM.set_default_size(375, 500)
 		
 		self.tvUsers.append_column(gtk.TreeViewColumn('User', gtk.CellRendererText(), text=0))
 		self.tvUsers.set_model(gtk.ListStore(str))
@@ -292,10 +303,50 @@ class MainWindow(object):
 		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
 		self.tvUsers.sensitive = True
 		self.userlist = []
+		
+		# System Tray icon
+		self.siIcon = gtk.status_icon_new_from_file(resource('subim.svg'))
+		self.siIcon.set_tooltip("SubIM - "+getHost())
+		self.siIcon.set_visible(True)
+		self.siIcon.connect("activate", self.statusActivate)
+		self.siIcon.connect("popup-menu", self.statusPopup)
+	
+	def statusActivate(self, icon):
+		if self.wSubIM.get_property('visible'):
+			self.wSubIM.hide()
+		else:
+			self.wSubIM.present()
+	
+	def ShowAbout(self, item=None):
+		PROPS = {
+			'name' : 'SubIM',
+			'comments' : "A dirt simple IM program for your local subnet.",
+			'logo' : self.wSubIM.get_icon(),
+			'version' : __version__,
+			'authors' : [__author__],
+			'copyright' : "© 2007 James Bliss. Released under GNU GPL",
+			'website' : 'http://www.astro73.com/',
+		}
+		ad = gtk.AboutDialog()
+		for k,v in PROPS.items():
+			try:
+				ad.set_property(k,v)
+			except Exception, err:
+				print type(err), err
+		ad.present()
+		
+	
+	def QuitApp(self, item=None):
+		self.wSubIM.hide()
+		self.wSubIM.destroy()
+		gtk.main_quit()
+	
+	def statusPopup(self, icon, button, time):
+		self.mStatusPopup.popup(None, None, gtk.status_icon_position_menu, button, time, icon)
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
-		gtk.main_quit(0)
+		gtk.main_quit()
 	
 	def present(self):
 		self.wSubIM.present()
