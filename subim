@@ -101,16 +101,16 @@ class Protocol(object):
 	
 	def __readHeader(self):
 		l = struct.calcsize(HEADER_FORMAT)
-		d = self.sock.read(l)
+		d = self.sock.recv(l, socket.MSG_WAITALL)
 		cmd, ulen = struct.unpack(HEADER_FORMAT, d)
-		user = self.sock.read(ulen)
+		user = self.sock.recv(ulen, socket.MSG_WAITALL)
 		return cmd, self.__decode(user)
 	
 	def __readArgument(self):
 		l = struct.calcsize(ARGUMENT_FORMAT)
-		d = self.sock.read(l)
+		d = self.sock.recv(l, socket.MSG_WAITALL)
 		ulen, = struct.unpack(ARGUMENT_FORMAT, d)
-		data = self.sock.read(ulen)
+		data = self.sock.recv(ulen, socket.MSG_WAITALL)
 		return self.__decode(data)
 	
 	def __send(self, cmd, *args):
