@@ -346,7 +346,8 @@ class MainWindow(object):
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
-		gtk.main_quit()
+		self.wSubIM.hide()
+		return True # Override
 	
 	def present(self):
 		self.wSubIM.present()
