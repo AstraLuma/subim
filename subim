@@ -1,5 +1,8 @@
 #!/usr/bin/python2.5
 # -*- coding: utf-8 -*-
+"""
+A dirt simple IM program for your local subnet.
+"""
 from __future__ import with_statement
 from __future__ import division
 import pygtk
@@ -253,7 +256,7 @@ def hsl(H,S,L):
 
 def getColorForUser(user):
 	"""
-	Algorithm borrowed from chromatabs.
+	Algorithm borrowed from the chromatabs Firefox extension.
 	"""
 	def djb2hash(hashstring):
 		hashvalue = 5381;
@@ -265,11 +268,37 @@ def getColorForUser(user):
 	rgb = tuple(map((lambda n: int(n * 0xFFFF)), rgb))
 	return '#%04X%04X%04X' % rgb
 
+def findMe():
+	"""fineMe() -> str
+	Finds the actual path of the ran program.
+	"""
+	if os.path.isfile(sys.argv[0]):
+		return sys.argv[0]
+	for path in os.environ['PATH'].split(os.pathsep):
+		if os.path.isfile(os.path.join(path, sys.argv[0])):
+			return os.path.join(path, sys.argv[0])
+
 def resource(fn):
-	if os.path.exists(os.path.join('/usr/lib/subim', fn)):
-		return os.path.join('/usr/lib/subim', fn)
+	paths = [
+		os.curdir, # For development
+		os.path.join(sys.prefix, 'share', 'subim'), # Assuming a single, global prefix
+		# And now for some common prefix's
+		'/'+os.path.join('usr', 'local', 'share', 'subim'),
+		'/'+os.path.join('usr', 'share', 'subim'),
+		# Relative to the script
+		os.path.join(os.path.dirname(findMe()), os.pardir, 'share', 'subim'),
+		# Now we're getting desparate
+		os.path.join(os.pardir, 'share', 'subim'),
+		]
+	for path in paths:
+		try:
+			f = os.path.join(path, fn)
+			if os.path.exists(f):
+				return f
+		except: pass
 	else:
-		return fn
+		print >> sys.stderr, "Couldn't find ", repr(fn)
+		return fn #Can't actually find it
 
 class MainWindow(object):
 	def __listWidgets(self, root):
@@ -320,7 +349,7 @@ class MainWindow(object):
 	def ShowAbout(self, item=None):
 		PROPS = {
 			'name' : 'SubIM',
-			'comments' : "A dirt simple IM program for your local subnet.",
+			'comments' : "A dirt simple IM program for your local subnet",
 			'logo' : self.wSubIM.get_icon(),
 			'version' : __version__,
 			'authors' : [__author__],
