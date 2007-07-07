@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE glade-interface SYSTEM "glade-2.0.dtd">
-<!--Generated with glade3 3.2.0 on Sat Jul  7 10:53:53 2007 by astronouth7303@astro73-->
+<!--Generated with glade3 3.2.0 on Sat Jul  7 11:37:13 2007 by astronouth7303@astro73-->
 <glade-interface>
   <widget class="GtkWindow" id="wSubIM">
     <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
@@ -96,7 +96,6 @@
                     <property name="left_margin">2</property>
                     <property name="right_margin">2</property>
                     <property name="accepts_tab">False</property>
-                    <property name="text" translatable="yes">A really, really looooooong message that just keeps going on and on until it finally wraps around and you reach the end.</property>
                   </widget>
                 </child>
               </widget>
@@ -118,45 +117,6 @@
           </widget>
           <packing>
             <property name="resize">False</property>
-          </packing>
-        </child>
-      </widget>
-    </child>
-  </widget>
-  <widget class="GtkAboutDialog" id="adAbout">
-    <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
-    <property name="border_width">5</property>
-    <property name="title" translatable="yes">About SubIM</property>
-    <property name="resizable">False</property>
-    <property name="window_position">GTK_WIN_POS_CENTER_ON_PARENT</property>
-    <property name="type_hint">GDK_WINDOW_TYPE_HINT_DIALOG</property>
-    <property name="has_separator">False</property>
-    <property name="name">Glade</property>
-    <property name="version">1.0</property>
-    <property name="copyright" translatable="yes">©2007 James Bliss</property>
-    <property name="comments" translatable="yes">(comments)</property>
-    <property name="website">http://www.astro73.com/</property>
-    <property name="website_label" translatable="yes">Astro73.com</property>
-    <property name="license" translatable="yes">GNU GPL</property>
-    <property name="authors">James Bliss</property>
-    <property name="documenters">James Bliss</property>
-    <child internal-child="vbox">
-      <widget class="GtkVBox" id="dialog-vbox1">
-        <property name="visible">True</property>
-        <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
-        <property name="spacing">2</property>
-        <child>
-          <placeholder/>
-        </child>
-        <child internal-child="action_area">
-          <widget class="GtkHButtonBox" id="dialog-action_area1">
-            <property name="visible">True</property>
-            <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
-            <property name="layout_style">GTK_BUTTONBOX_END</property>
-          </widget>
-          <packing>
-            <property name="expand">False</property>
-            <property name="pack_type">GTK_PACK_END</property>
           </packing>
         </child>
       </widget>
