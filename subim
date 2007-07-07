@@ -12,11 +12,12 @@ import os, sys, socket, struct, threading
 # The IPv4 multicast group is 224.0.0.0/4
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
 # The link scope is 239.255.0.0/16, the organization scope is 239.192.0.0/14
-# I'm going to use the latter, with the last 2 bytes being map(ord, 'SI')
+# I'm going to use the latter, with the last 2 bytes being map(ord, 'SI'),
+# or 239.192.83.73
 SUBIM_GROUP = '239.192.83.73'
 # Set this to the number of hops packets can take. 1 is fine for most homes,
 # Organizations or other more complex setups may need higher numbers.
-SUBIM_TTL = 1
+SUBIM_TTL = 3
 
 # Change this to 8123 to test with mcast.py found in the Python demos
 SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
@@ -29,7 +30,6 @@ def getHost():
 	return _hostname
 
 
-# Open a UDP socket, bind it to a port and select a multicast group
 def openmcastsock(group, port):
 	"""
 	Open a UDP socket, bind it to a port and select a multicast group
@@ -213,6 +213,7 @@ class MainWindow(object):
 		self.umodel = self._users.get_model()
 		self.umodel.set_sort_column_id(0, gtk.SORT_ASCENDING)
 		self._users.sensitive = True
+		self.userlist = []
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
@@ -239,19 +240,23 @@ class MainWindow(object):
 		va.set_value(va.upper)
 	
 	def addUser(self, userName):
-		print "FIXME: addUser", userName
-		if [userName] in self.umodel: return
-		i = self.umodel.append([userName])
-		print "addUser:i", self.umodel.get_path(i)
-		assert self._users.get_model() is self.umodel
-		print "addUser:model", map(list,self.umodel)
+		print "addUser", userName
+		if userName not in self.userlist:
+			self.userlist.append(userName)
+			i = self.umodel.append([userName])
+			print "addUser:i", self.umodel.get_path(i)
+			assert self._users.get_model() is self.umodel
+			print "addUser:model", map(list,self.umodel)
 	
 	def rmUser(self, userName):
-		print "FIXME: rmUser", userName
-		for i in range(0, len(self.umodel)):
-			if self.umodel[i][0] == userName:
-				del self.umodel[i]
-				return
+		print "rmUser", userName
+		if userName in self.userlist:
+			i = self.userlist.index(userName)
+			del self.userlist[i]
+			for i in range(0, len(self.umodel)):
+				if self.umodel[i][0] == userName:
+					del self.umodel[i]
+					return
 	
 	_first = True
 	def addMessage(self, user, msg):
