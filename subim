@@ -20,7 +20,8 @@ SUBIM_GROUP = '239.192.83.73'
 SUBIM_TTL = 3
 
 # Change this to 8123 to test with mcast.py found in the Python demos
-SUBIM_PORT = 5349 # map(hex, map(ord, 'SI')), SI = SubIM
+# 5349 = map(hex, map(ord, 'SI')), SI = SubIM, = 5349
+SUBIM_PORT = 5349
 
 _hostname = None
 def getHost():
@@ -287,6 +288,8 @@ if __name__ == '__main__':
 	protocol.joiners.append(userJoined)
 	protocol.parters.append(userParted)
 	protocol.msgers.append(msgRecv)
+	
+	protocol.startReading()
 	
 	with protocol:
 		protocol.listUsers()
