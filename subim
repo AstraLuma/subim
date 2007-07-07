@@ -73,13 +73,6 @@ CMD_USER_JOIN = 1 # Also used as the response for a user list request
 CMD_USER_PART = 2
 CMD_LIST_USERS = 3
 
-NUM_ARGS = {
-	CMD_MESSAGE : 1,
-	CMD_USER_JOIN : 0,
-	CMD_USER_PART : 0,
-	CMD_LIST_USERS : 0,
-}
-
 class Protocol(object):
 	sock = None
 	
@@ -102,6 +95,7 @@ class Protocol(object):
 	def __decode(self, data):
 		return unicode(data, 'utf8', 'ignore')
 	
+	# SENDING #
 	def __send(self, cmd, *args):
 		args = map(unicode, args)
 		print "Protocol.__send", cmd, args
@@ -118,21 +112,6 @@ class Protocol(object):
 		print "Protocol.sendMessage", msg
 		self.__send(CMD_MESSAGE, msg)
 	
-	def recieveMessage(self, user, msg):
-		print "Protocol.recieveMessage", user, msg
-		for c in self.msgers:
-			if callable(c): c(user, msg)
-	
-	def userJoin(self, user):
-		print "Protocol.userJoin", user
-		for c in self.joiners:
-			if callable(c): c(user)
-	
-	def userPart(self, user):
-		print "Protocol.userPart", user
-		for c in self.parters:
-			if callable(c): c(user)
-	
 	def listUsers(self):
 		print "Protocol.listUsers"
 		self.userJoin(getHost())
@@ -148,7 +127,23 @@ class Protocol(object):
 		self.__send(CMD_USER_PART)
 		self.userPart(getHost())
 	
-	def __reply2list(self):
+	# RECEIVING #
+	def recieveMessage(self, user, msg):
+		print "Protocol.recieveMessage", user, msg
+		for c in self.msgers:
+			if callable(c): c(user, msg)
+	
+	def userJoin(self, user):
+		print "Protocol.userJoin", user
+		for c in self.joiners:
+			if callable(c): c(user)
+	
+	def userPart(self, user):
+		print "Protocol.userPart", user
+		for c in self.parters:
+			if callable(c): c(user)
+	
+	def __reply2list(self, user):
 		self.__send(CMD_USER_JOIN)
 	
 	COMMANDS = {
