@@ -9,6 +9,7 @@ gtk.gdk.threads_init()
 import gtk.glade
 import gobject
 import os, sys, socket, struct, threading
+import traceback
 
 # The IPv4 multicast group is 224.0.0.0/4
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
@@ -189,7 +190,6 @@ class Protocol(object):
 			try:
 				self.readOne()
 			except:
-				import traceback
 				traceback.print_exc()
 	
 	def startReading(self):
