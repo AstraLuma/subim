@@ -3,6 +3,24 @@
 """
 A dirt simple IM program for your local subnet.
 """
+# SubIM, A dirt simple IM program for your local subnet.
+# Copyright (C) 2007 James Bliss <james.bliss@astro73.com>
+# 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# 
+
 #from __future__ import with_statement Compatibility with debian stable
 from __future__ import division
 import pygtk
@@ -16,18 +34,20 @@ import pango
 import os, sys, socket, struct, threading
 import traceback, datetime, re
 
+# These 4 variables are settings, you may configure them as you wish.
+
 # The IPv4 multicast group is 224.0.0.0/4
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
 # The link scope is 239.255.0.0/16, the organization scope is 239.192.0.0/14
-# I'm going to use the former, with the last 2 bytes being map(ord, 'SI'),
-# or 239.255.83.73
+# I'm going to use the former, with the last 2 bytes being map(ord, 'SI'), 
+# SI = SubIM, or 239.255.83.73
 SUBIM_GROUP = '239.255.83.73'
 # Set this to the number of hops packets can take. 1 is fine for most homes,
 # Organizations or other more complex setups may need higher numbers.
 SUBIM_TTL = 3
 
 # Change this to 8123 to test with mcast.py found in the Python demos
-# 5349 = map(hex, map(ord, 'SI')), SI = SubIM, = 5349
+# 5349 = "%02X%02X" % tuple(map(ord, 'SI')), SI = SubIM
 SUBIM_PORT = 5349
 
 # For the nick hasher
@@ -41,6 +61,7 @@ __credits__ = """Cuog, for helping me test.
 David, for putting up with me.
 Various IRC channels, for putting up with my (sometimes n00bish) questions.
 PyGTK & Glade, for making this a little bit easier.
+xchat-gnome, for lending me the speech bubble from their icon.
 """
 
 _hostname = None
@@ -85,7 +106,7 @@ def openmcastsock(group, port):
 	#
 	return s
 
-HEADER_FORMAT = "!HL"
+HEADER_FORMAT = "!H"
 ARGUMENT_FORMAT = "!L"
 
 CMD_MESSAGE = 0
@@ -121,9 +142,8 @@ class Protocol(object):
 	def __send(self, cmd, *args):
 		args = map(unicode, args)
 		print "Protocol.__send", cmd, args
-		user = unicode(getHost()).encode('utf8', 'ignore')
-		data = struct.pack(HEADER_FORMAT, cmd, len(user))
-		data += user
+		data = struct.pack(HEADER_FORMAT, cmd)
+		args = [getHost()] + args # Prefix the username to the args
 		for a in args:
 			d = self.__encode(a)
 			data += struct.pack(ARGUMENT_FORMAT, len(d))
@@ -136,7 +156,7 @@ class Protocol(object):
 	
 	def listUsers(self):
 		print "Protocol.listUsers"
-		self.userJoin(getHost())
+		#self.userJoin(getHost()) Shouldn't be needed, we'll reply to our own list
 		self.__send(CMD_LIST_USERS)
 	
 	def join(self):
@@ -150,25 +170,25 @@ class Protocol(object):
 		self.__send(CMD_USER_PART)
 	
 	# RECEIVING #
-	def recieveMessage(self, user, msg):
+	def recieveMessage(self, timestamp, src, user, msg):
 		print "Protocol.recieveMessage", user, msg
 		for c in self.msgers:
-			if callable(c): c(user, msg)
+			if callable(c): c(timestamp, user, msg)
 	
-	def userJoin(self, user):
+	def userJoin(self, timestamp, src, user):
 		print "Protocol.userJoin", user
 		for c in self.joiners:
-			if callable(c): c(user)
+			if callable(c): c(timestamp, user)
 	
-	def userPart(self, user):
+	def userPart(self, timestamp, src, user):
 		print "Protocol.userPart", user
 		for c in self.parters:
-			if callable(c): c(user)
-		# If it's us, send out a join message
+			if callable(c): c(timestamp, user)
+		# If they're using the same name, send out a join message (we're still here)
 		if user == getHost() and self.joined:
 			self.join()
 	
-	def __reply2list(self, user):
+	def __reply2list(self, timestamp, src, user):
 		self.__send(CMD_USER_JOIN)
 	
 	COMMANDS = {
@@ -181,11 +201,10 @@ class Protocol(object):
 	def __readPacket(self):
 		dlen = struct.calcsize(HEADER_FORMAT)
 		d,src = self.rsock.recvfrom(4096)
+		timestamp = datetime.datetime.now()
 		print "__readPacket:", repr(d),src
-		cmd, ulen = struct.unpack(HEADER_FORMAT, d[:dlen])
+		cmd, = struct.unpack(HEADER_FORMAT, d[:dlen])
 		d = d[dlen:]
-		user = self.__decode(d[:ulen])
-		d = d[ulen:]
 		args = []
 		alen = struct.calcsize(ARGUMENT_FORMAT)
 		while len(d) >= alen:
@@ -195,20 +214,26 @@ class Protocol(object):
 			d = d[l:]
 		if len(d):
 			print "Warning: Leftover data: ", repr(d)
-		return src, cmd, user, args
+		if len(args) < 1:
+			print "Warning: No user found"
+		else:
+			user = args[0]
+			args = args[1:]
+		return timestamp, src, cmd, user, args
 	
 	def readOne(self):
-		src, cmd, user, args = self.__readPacket()
+		timestamp, src, cmd, user, args = self.__readPacket()
 		print "readOne:", src, cmd, user, args
 		if cmd in self.COMMANDS:
-			self.COMMANDS[cmd](self, user, *args)
+			gobject.idle_add(self.COMMANDS[cmd],self, timestamp, src, user, *args)
 	
 	def readForever(self):
 		print "Start reading"
 		while True:
 			try:
 				self.readOne()
-			except:
+			except Exception, err:
+				print type(err), err
 				traceback.print_exc()
 	
 	def startReading(self):
@@ -268,27 +293,18 @@ def getColorForUser(user):
 	rgb = tuple(map((lambda n: int(n * 0xFFFF)), rgb))
 	return '#%04X%04X%04X' % rgb
 
-def findMe():
-	"""fineMe() -> str
-	Finds the actual path of the ran program.
-	"""
-	if os.path.isfile(sys.argv[0]):
-		return sys.argv[0]
-	for path in os.environ['PATH'].split(os.pathsep):
-		if os.path.isfile(os.path.join(path, sys.argv[0])):
-			return os.path.join(path, sys.argv[0])
-
-def resource(fn):
+def resource(fn,sec="share"):
 	paths = [
 		os.curdir, # For development
-		os.path.join(sys.prefix, 'share', 'subim'), # Assuming a single, global prefix
+		os.path.join(sys.prefix, sec, 'subim'), # Assuming a single, global prefix
 		# And now for some common prefix's
-		'/'+os.path.join('usr', 'local', 'share', 'subim'),
-		'/'+os.path.join('usr', 'share', 'subim'),
+		'/'+os.path.join('usr', 'local', sec, 'subim'),
+		'/'+os.path.join('usr', sec, 'subim'),
 		# Relative to the script
-		os.path.join(os.path.dirname(findMe()), os.pardir, 'share', 'subim'),
+		os.path.join(os.path.dirname(__file__), os.pardir, sec, 'subim'),
 		# Now we're getting desparate
-		os.path.join(os.pardir, 'share', 'subim'),
+		os.path.join(os.pardir, sec, 'subim'),
+		#FIXME: Handle windows installation
 		]
 	for path in paths:
 		try:
@@ -364,19 +380,31 @@ class MainWindow(object):
 			'name' : 'SubIM',
 			'comments' : "A dirt simple IM program for your local subnet",
 			'logo' : self.wSubIM.get_icon(),
+			'icon' : self.wSubIM.get_icon(),
 			'version' : ver,
 			'authors' : [__author__],
 			'copyright' : "© 2007 James Bliss. Released under GNU GPL",
 			'website' : 'http://www.astro73.com/',
 		}
+		try:
+			f = file(resource('COPYING', 'share/doc'))
+			PROPS['license'] = f.read()
+			f.close()
+			del f
+		except: pass
 		ad = gtk.AboutDialog()
 		for k,v in PROPS.items():
 			try:
 				ad.set_property(k,v)
 			except Exception, err:
 				print type(err), err
+		def resp(dlg, r):
+			if r in [gtk.RESPONSE_OK, gtk.RESPONSE_CANCEL, gtk.RESPONSE_CLOSE, 
+					gtk.RESPONSE_YES, gtk.RESPONSE_NO]:
+				dlg.hide()
+				dlg.destroy()
+		ad.connect('response', resp)
 		ad.present()
-		
 	
 	def QuitApp(self, item=None):
 		self.wSubIM.hide()
@@ -384,7 +412,8 @@ class MainWindow(object):
 		gtk.main_quit()
 	
 	def statusPopup(self, icon, button, time):
-		self.mStatusPopup.popup(None, None, gtk.status_icon_position_menu, button, time, icon)
+		self.mStatusPopup.popup(None, None, gtk.status_icon_position_menu, \
+		                        button, time, icon)
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
@@ -415,20 +444,20 @@ class MainWindow(object):
 		buf = self.tvMessage.get_buffer()
 		buf.delete(*buf.get_bounds())
 	
-	def addUser(self, userName):
+	def addUser(self, time, userName):
 		print "addUser", userName
 		if userName not in self.userlist:
 			self.userlist.append(userName)
-			self.addNotice(userName, "joined")
+			self.addNotice(time, userName, "joined")
 			i = self.umodel.append([userName])
 			assert self.tvUsers.get_model() is self.umodel
 	
-	def rmUser(self, userName):
+	def rmUser(self, time, userName):
 		print "rmUser", userName
 		if userName in self.userlist:
 			i = self.userlist.index(userName)
 			del self.userlist[i]
-			self.addNotice(userName, "left")
+			self.addNotice(time, userName, "left")
 			for i in range(0, len(self.umodel)):
 				if self.umodel[i][0] == userName:
 					del self.umodel[i]
@@ -454,25 +483,25 @@ class MainWindow(object):
 		"""
 		#FIXME: Sometimes, this causes the text to disappear
 		va = self.swHistory.get_vadjustment()
+		print "va:", va.lower, va.value, va.upper, va.page_size
 		va.set_value(va.upper)
 	
-	def getTime(self):
-		dt = datetime.datetime.now()
+	def getTime(self, dt):
 		dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0, dt.tzinfo)
 		return u"[%s] " % unicode(dt)
 	
 	_first = True
-	def addMessage(self, user, msg):
+	def addMessage(self, time, user, msg):
 		buf = self.tvHistory.get_buffer()
 		if not self._first:
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
 		ut = buf.create_tag(foreground=getColorForUser(user))
-		buf.insert_with_tags(buf.get_bounds()[1], self.getTime()+user+":", ut)
+		buf.insert_with_tags(buf.get_bounds()[1], self.getTime(time)+user+":", ut)
 		buf.insert(buf.get_bounds()[1], " "+msg.strip())
 		self.scrollDown()
 	
-	def addNotice(self, user, msg):
+	def addNotice(self, time, user, msg):
 		"""
 		Like addMessage, but for things like quit/join.
 		"""
@@ -481,7 +510,7 @@ class MainWindow(object):
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
 		ut = buf.create_tag(weight=pango.WEIGHT_BOLD)
-		buf.insert_with_tags(buf.get_bounds()[1], self.getTime()+user+" "+msg.strip(), ut)
+		buf.insert_with_tags(buf.get_bounds()[1], self.getTime(time)+user+" "+msg.strip(), ut)
 		self.scrollDown()
 	
 
@@ -490,15 +519,15 @@ if __name__ == '__main__':
 	print repr(app)
 	protocol = Protocol()
 	
-	def msgRecv(user, msg):
+	def msgRecv(time, user, msg):
 		global app
-		app.addMessage(user, msg)
-	def userJoined(user):
+		app.addMessage(time, user, msg)
+	def userJoined(time, user):
 		global app
-		app.addUser(user)
-	def userParted(user):
+		app.addUser(time, user)
+	def userParted(time, user):
 		global app
-		app.rmUser(user)
+		app.rmUser(time, user)
 	
 	protocol.joiners.append(userJoined)
 	protocol.parters.append(userParted)

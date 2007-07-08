@@ -1,3 +1,10 @@
+subim (0.0.3) unstable; urgency=low
+
+  * Added explicit licenses
+  * Fixed issues with threading (run 12 tests and see how you hold up!)
+
+ -- James Bliss <james.bliss@astro73.com>  Sun, 8 June 2007 16:05:00 -0400
+
 subim (0.0.2) unstable; urgency=low
 
   * Made compatible with pre-2.10 GTK
