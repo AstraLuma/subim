@@ -3,7 +3,7 @@
 """
 A dirt simple IM program for your local subnet.
 """
-from __future__ import with_statement
+#from __future__ import with_statement Compatibility with debian stable
 from __future__ import division
 import pygtk
 pygtk.require('2.0')
@@ -14,7 +14,7 @@ gobject.threads_init()
 import gtk.glade
 import pango
 import os, sys, socket, struct, threading
-import traceback, datetime
+import traceback, datetime, re
 
 # The IPv4 multicast group is 224.0.0.0/4
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
@@ -165,7 +165,7 @@ class Protocol(object):
 		for c in self.parters:
 			if callable(c): c(user)
 		# If it's us, send out a join message
-		if user == getHostName() and self.joined:
+		if user == getHost() and self.joined:
 			self.join()
 	
 	def __reply2list(self, user):
@@ -219,7 +219,7 @@ class Protocol(object):
 	def __enter__(self):
 		self.join()
 	
-	def __exit__(self, exc_type, exc_value, traceback):
+	def __exit__(self, exc_type=None, exc_value=None, traceback=None):
 		self.part()
 
 def hsl(H,S,L):
@@ -334,11 +334,14 @@ class MainWindow(object):
 		self.userlist = []
 		
 		# System Tray icon
-		self.siIcon = gtk.status_icon_new_from_file(resource('subim.svg'))
-		self.siIcon.set_tooltip("SubIM - "+getHost())
-		self.siIcon.set_visible(True)
-		self.siIcon.connect("activate", self.statusActivate)
-		self.siIcon.connect("popup-menu", self.statusPopup)
+		if hasattr(gtk, 'status_icon_new_from_file'):
+			self.siIcon = gtk.status_icon_new_from_file(resource('subim.svg'))
+			self.siIcon.set_tooltip("SubIM - "+getHost())
+			self.siIcon.set_visible(True)
+			self.siIcon.connect("activate", self.statusActivate)
+			self.siIcon.connect("popup-menu", self.statusPopup)
+		else:
+			self.siIcon = None
 	
 	def statusActivate(self, icon):
 		if self.wSubIM.get_property('visible'):
@@ -347,11 +350,19 @@ class MainWindow(object):
 			self.wSubIM.present()
 	
 	def ShowAbout(self, item=None):
+		if not hasattr(gtk,'AboutDialog'):
+			return
+		REV = re.compile(r"""\$Revision:(.*)\$""")
+		m = REV.match(__version__)
+		if m:
+			ver = "r"+m.group(1).strip()
+		else:
+			ver = __version__
 		PROPS = {
 			'name' : 'SubIM',
 			'comments' : "A dirt simple IM program for your local subnet",
 			'logo' : self.wSubIM.get_icon(),
-			'version' : __version__,
+			'version' : ver,
 			'authors' : [__author__],
 			'copyright' : "© 2007 James Bliss. Released under GNU GPL",
 			'website' : 'http://www.astro73.com/',
@@ -493,8 +504,12 @@ if __name__ == '__main__':
 	
 	protocol.startReading()
 	
-	with protocol:
+#	with protocol: Compatiblity with debian stable
+	protocol.__enter__()
+	try:
 		protocol.listUsers()
 		app.present()
 		gtk.main()
+	finally:
+		protocol.__exit__()
 

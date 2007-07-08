@@ -1,3 +1,12 @@
+subim (0.0.2) unstable; urgency=low
+
+  * Made compatible with pre-2.10 GTK
+  * Removed "$Revision:" from about dialog
+  * Made compatible with Python 2.4
+  * Compatibility with Debian stable
+
+ -- James Bliss <james.bliss@astro73.com>  Fri, 25 May 2007 14:01:01 -0400
+
 subim (0.0.1) unstable; urgency=low
 
   * Initial release
