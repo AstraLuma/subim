@@ -8,7 +8,8 @@ Standards-Version: 3.7.2
 Package: subim
 Architecture: all
 Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}, python-gtk2, python-glade2
-Description: A dirt simple IM program for your local subnet.
+Recommends: python-gtk2 (>= 2.10)
+Description: A dirt simple IM program for your local subnet
  SubIM is a chat client that supports 1 simple binary protocol, has only one 
  chat room, and only works on your local LAN. Why? To have a chat for your home 
  network without having to set up a server or take a detour through the WWW.

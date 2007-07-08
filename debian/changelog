@@ -6,11 +6,11 @@ subim (0.0.2) unstable; urgency=low
   * Compatibility with Debian stable
   * Bug fix if user leaves (undefined function)
 
- -- James Bliss <james.bliss@astro73.com>  Fri, 25 May 2007 14:01:01 -0400
+ -- James Bliss <james.bliss@astro73.com>  Sun, 8 June 2007 14:45:00 -0400
 
 subim (0.0.1) unstable; urgency=low
 
   * Initial release
 
- -- James Bliss <james.bliss@astro73.com>  Fri, 25 May 2007 14:01:01 -0400
+ -- James Bliss <james.bliss@astro73.com>  Sat, 7 June 2007 13:00:00 -0400
 
