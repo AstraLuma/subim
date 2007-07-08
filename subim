@@ -344,7 +344,9 @@ class MainWindow(object):
 			self.siIcon = None
 	
 	def statusActivate(self, icon):
-		if self.wSubIM.get_property('visible'):
+		if self.siIcon is None:
+			self.QuitApp()
+		elif self.wSubIM.get_property('visible'):
 			self.wSubIM.hide()
 		else:
 			self.wSubIM.present()
