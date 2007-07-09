@@ -1,6 +1,8 @@
 subim (0.0.4) unstable; urgency=low
 
-  * TODO: Added blinking icon notification
+  * Added notification
+  * Fixed interpreter bug
+  * Other bits
 
  -- James Bliss <james.bliss@astro73.com>  Sun, 8 June 2007 22:00:00 -0400
 

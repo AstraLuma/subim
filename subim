@@ -202,7 +202,7 @@ class Protocol(object):
 		dlen = struct.calcsize(HEADER_FORMAT)
 		d,src = self.rsock.recvfrom(4096)
 		timestamp = datetime.datetime.now()
-		print "__readPacket:", repr(d),src
+		#print "__readPacket:", repr(d),src
 		cmd, = struct.unpack(HEADER_FORMAT, d[:dlen])
 		d = d[dlen:]
 		args = []
@@ -351,13 +351,30 @@ class MainWindow(object):
 		
 		# System Tray icon
 		if hasattr(gtk, 'status_icon_new_from_file'):
-			self.siIcon = gtk.status_icon_new_from_file(resource('subim.svg'))
+			self.siIcon = gtk.status_icon_new_from_file(resource('subim.svg')) #GTK 2.10
 			self.siIcon.set_tooltip("SubIM - "+getHost())
 			self.siIcon.set_visible(True)
 			self.siIcon.connect("activate", self.statusActivate)
 			self.siIcon.connect("popup-menu", self.statusPopup)
 		else:
 			self.siIcon = None
+	
+	def setUrgent(self):
+		try:
+			if self.wSubIM.get_property('has-toplevel-focus'): #GTK 2.4
+				return
+		except: pass
+		if self.siIcon is not None:
+			self.siIcon.set_blinking(True)
+		self.wSubIM.set_property('urgency-hint', True) #GTK 2.6
+	
+	def clearUrgent(self):
+		if self.siIcon is not None:
+			self.siIcon.set_blinking(False)
+		try:
+			self.wSubIM.set_property('urgency-hint', False) #GTK 2.6
+		except Exception, err:
+			print type(err), err
 	
 	def statusActivate(self, icon):
 		if self.siIcon is None:
@@ -392,7 +409,7 @@ class MainWindow(object):
 			f.close()
 			del f
 		except: pass
-		ad = gtk.AboutDialog()
+		ad = gtk.AboutDialog() #GTK 2.6
 		for k,v in PROPS.items():
 			try:
 				ad.set_property(k,v)
@@ -412,20 +429,31 @@ class MainWindow(object):
 		gtk.main_quit()
 	
 	def statusPopup(self, icon, button, time):
+		print "statusPopup", icon, button, time
 		self.mStatusPopup.popup(None, None, gtk.status_icon_position_menu, \
 		                        button, time, icon)
 	
 	def winDelete(self, widget, event):
 		print "winDelete", widget, event
-		self.wSubIM.hide()
-		return True # Override
+		if self.siIcon is None:
+			self.QuitApp()
+		else:
+			self.wSubIM.hide()
+			return True # Override
+	
+	def focusHandler(self, *p):
+		#print "focusHandler", p
+		#print datetime.datetime.now(),"\t",p[1].type
+		self.clearUrgent()
 	
 	def present(self):
 		self.wSubIM.present()
+		self.clearUrgent()
 		# Frankly, these two should be in the glade file
 		self.tvMessage.grab_focus()
 		self.bSend.grab_default()
 		# And the fact that I have to do this after presenting is a little ridiculous
+		# _And_ they should be in the glade file
 		if not self.__initPanes:
 			self.vpInput.set_position(self.vpInput.get_position() - 50)
 			self.hpUsers.set_position(self.hpUsers.get_position() - 75)
@@ -502,6 +530,7 @@ class MainWindow(object):
 			else:
 				ut = buf.create_tag(**dict(attrs))
 				buf.insert_with_tags(buf.get_bounds()[1], txt, ut)
+		self.setUrgent()
 		self.scrollDown()
 	
 	def addMessage(self, time, user, msg):
@@ -556,6 +585,7 @@ if __name__ == '__main__':
 	try:
 		protocol.listUsers()
 		app.present()
+		gtk.gdk.set_show_events(True)
 		gtk.main()
 	finally:
 		protocol.__exit__()
