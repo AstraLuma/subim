@@ -491,27 +491,40 @@ class MainWindow(object):
 		return u"[%s] " % unicode(dt)
 	
 	_first = True
-	def addMessage(self, time, user, msg):
+	def __addText(self, list):
 		buf = self.tvHistory.get_buffer()
 		if not self._first:
 			buf.insert(buf.get_bounds()[1], "\n")
 		self._first = False
-		ut = buf.create_tag(foreground=getColorForUser(user))
-		buf.insert_with_tags(buf.get_bounds()[1], self.getTime(time)+user+":", ut)
-		buf.insert(buf.get_bounds()[1], " "+msg.strip())
+		for txt, attrs in list:
+			if attrs is None:
+				buf.insert(buf.get_bounds()[1], txt)
+			else:
+				ut = buf.create_tag(**dict(attrs))
+				buf.insert_with_tags(buf.get_bounds()[1], txt, ut)
 		self.scrollDown()
+	
+	def addMessage(self, time, user, msg):
+		self.__addText([
+			(self.getTime(time)+user+":", dict(foreground=getColorForUser(user))),
+			(" "+msg.strip(), None),
+		])
 	
 	def addNotice(self, time, user, msg):
 		"""
 		Like addMessage, but for things like quit/join.
 		"""
-		buf = self.tvHistory.get_buffer()
-		if not self._first:
-			buf.insert(buf.get_bounds()[1], "\n")
-		self._first = False
-		ut = buf.create_tag(weight=pango.WEIGHT_BOLD)
-		buf.insert_with_tags(buf.get_bounds()[1], self.getTime(time)+user+" "+msg.strip(), ut)
-		self.scrollDown()
+		self.__addText([
+			(self.getTime(time), None),
+			(user+" "+msg.strip(), dict(weight=pango.WEIGHT_BOLD)),
+		])
+	
+	def addAction(self, time, user, msg):
+		self.__addText([
+			(self.getTime(time), dict(foreground=getColorForUser(user))),
+			("***"+user, dict(weight=pango.WEIGHT_BOLD,foreground=getColorForUser(user))),
+			(" "+msg.strip(), None),
+		])
 	
 
 if __name__ == '__main__':
@@ -521,7 +534,10 @@ if __name__ == '__main__':
 	
 	def msgRecv(time, user, msg):
 		global app
-		app.addMessage(time, user, msg)
+		if msg.startswith('/me'):
+			app.addAction(time,user,msg[len('/me'):])
+		else:
+			app.addMessage(time, user, msg)
 	def userJoined(time, user):
 		global app
 		app.addUser(time, user)
