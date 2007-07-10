@@ -1,8 +1,9 @@
 subim (0.0.5) unstable; urgency=low
 
   * Links and email addresses now are usable.
+  * Clearing the "urgent" flag more often.
 
- -- James Bliss <james.bliss@astro73.com>  Tue, 10 June 2007 12:00:00 -0400
+ -- James Bliss <james.bliss@astro73.com>  Tue, 10 June 2007 15:00:00 -0400
 
 subim (0.0.4) unstable; urgency=low
 

@@ -302,7 +302,7 @@ def getColorForUser(user):
 
 def resource(fn,sec="share"):
 	paths = [
-		os.curdir, # For development
+		os.path.dirname(__file__), # For development and Win32
 		os.path.join(sys.prefix, sec, 'subim'), # Assuming a single, global prefix
 		# And now for some common prefix's
 		'/'+os.path.join('usr', 'local', sec, 'subim'),
@@ -311,7 +311,6 @@ def resource(fn,sec="share"):
 		os.path.join(os.path.dirname(__file__), os.pardir, sec, 'subim'),
 		# Now we're getting desparate
 		os.path.join(os.pardir, sec, 'subim'),
-		#FIXME: Handle windows installation
 		]
 	for path in paths:
 		try:
@@ -365,6 +364,10 @@ def url_handler(href):
 	"""
 	#FIXME: skip the web browser and just go for the system-specific registration system
 	webbrowser.open(href)
+
+# This is a file-like object where we dump our message log. I probably won't 
+# change this until we have something resembling a configuration system.
+logger = file(os.devnull, 'at')
 
 class MainWindow(object):
 	def __listWidgets(self, root):
@@ -458,7 +461,7 @@ class MainWindow(object):
 			'website' : 'http://www.astro73.com/',
 		}
 		try:
-			f = file(resource('COPYING', 'share/doc'))
+			f = file(resource('COPYING', os.path.join('share','doc')), 'rU')
 			PROPS['license'] = f.read()
 			f.close()
 			del f
@@ -656,12 +659,18 @@ class MainWindow(object):
 	_first = True
 	def __addText(self, list):
 		buf = self.tvHistory.get_buffer()
+		def append(txt, tag=None):
+			logger.write(txt)
+			if tag is None:
+				buf.insert(buf.get_bounds()[1], txt)
+			else:
+				buf.insert_with_tags(buf.get_bounds()[1], txt, tag)
 		if not self._first:
-			buf.insert(buf.get_bounds()[1], "\n")
+			append("\n")
 		self._first = False
 		for txt, attrs in list:
 			if attrs is None:
-				buf.insert(buf.get_bounds()[1], txt)
+				append(txt)
 			else:
 				# href is a special attribute indicating links
 				href=None
@@ -673,7 +682,7 @@ class MainWindow(object):
 				ut = buf.create_tag(**dict(attrs))
 				if href is not None:
 					ut.set_data('href', href)
-				buf.insert_with_tags(buf.get_bounds()[1], txt, ut)
+				append(txt, ut)
 		self.setUrgent()
 		self.scrollDown()
 	
