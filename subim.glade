@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE glade-interface SYSTEM "glade-2.0.dtd">
-<!--Generated with glade3 3.2.0 on Mon Jul  9 02:00:11 2007 by astronouth7303@astro73-->
+<!--Generated with glade3 3.2.0 on Tue Jul 10 14:06:37 2007 by astronouth7303@astro73-->
 <glade-interface>
   <widget class="GtkWindow" id="wSubIM">
     <property name="events">GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK</property>
@@ -39,6 +39,9 @@
                     <property name="left_margin">2</property>
                     <property name="right_margin">2</property>
                     <property name="accepts_tab">False</property>
+                    <signal name="visibility_notify_event" handler="histVisible"/>
+                    <signal name="motion_notify_event" handler="histMotion"/>
+                    <signal name="button_release_event" handler="histButtonUp"/>
                   </widget>
                 </child>
               </widget>

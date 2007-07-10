@@ -32,7 +32,7 @@ gobject.threads_init()
 import gtk.glade
 import pango
 import os, sys, socket, struct, threading
-import traceback, datetime, re
+import traceback, datetime, re, webbrowser
 
 # These 4 variables are settings, you may configure them as you wish.
 
@@ -53,6 +53,12 @@ SUBIM_PORT = 5349
 # For the nick hasher
 SATURATION = 1.00
 LUMINANCE = 0.40
+
+# See http://www.pygtk.org/docs/pygtk/class-gtktexttag.html
+LINK_PROPERTIES = {
+	'foreground': "blue", 
+	'underline': pango.UNDERLINE_SINGLE,
+}
 
 __author__ = "James Bliss <astronouth7303@gmail.com>"
 __date__ = """$Date$"""
@@ -316,6 +322,37 @@ def resource(fn,sec="share"):
 		print >> sys.stderr, "Couldn't find ", repr(fn)
 		return fn #Can't actually find it
 
+def identifyUrls(txt):
+	"""
+	A generator, yielding (start,end) of URLs found.
+	"""
+	URL = re.compile(ur"""([a-zA-Z][a-zA-Z0-9+-.]*?:[\w:/?#\[\]@!*$&'()*+,;=.~\-%]+)""", re.I|re.U) #
+	for m in URL.finditer(txt):
+		print "Found:", m.group(0)
+		yield m.start(1), m.end(1)
+
+def divideByUrls(txt,tag={}):
+	"""
+	Takes a text string, and returns a list of tuples, [(str, dict)], like 
+	what would be passed to __addText().
+	"""
+	parts = []
+	for indeces in identifyUrls(txt):
+		for i in indeces:
+			parts.append(txt[:i])
+			txt = txt[i:]
+	if len(txt) > 0:
+		parts.append(txt)
+	for i, p in enumerate(parts):
+		ht = tag.copy()
+		ht['href']=p
+		if i % 2 == 0:
+			# Plain
+			yield p,tag
+		else:
+			# URL
+			yield p,ht
+
 class MainWindow(object):
 	def __listWidgets(self, root):
 		"""
@@ -331,6 +368,9 @@ class MainWindow(object):
 			self.__listWidgets(c)
 	
 	__initPanes = False
+	hovering_over_link = False
+	hand_cursor = gtk.gdk.Cursor(gtk.gdk.HAND2)
+	regular_cursor = gtk.gdk.Cursor(gtk.gdk.XTERM)
 	def __init__(self, fn):
 		self._xml = gtk.glade.XML(fn)
 		self._xml.signal_autoconnect(self)
@@ -383,6 +423,7 @@ class MainWindow(object):
 			self.wSubIM.hide()
 		else:
 			self.wSubIM.present()
+			self.clearUrgent()
 	
 	def ShowAbout(self, item=None):
 		if not hasattr(gtk,'AboutDialog'):
@@ -445,6 +486,87 @@ class MainWindow(object):
 		#print "focusHandler", p
 		#print datetime.datetime.now(),"\t",p[1].type
 		self.clearUrgent()
+	
+	# Links can also be activated by clicking.
+	def histButtonUp(self, text_view, event):
+		#print "histButtonUp", text_view, event
+		if event.type != gtk.gdk.BUTTON_RELEASE:
+			return False
+		if event.button != 1:
+			return False
+		buffer = text_view.get_buffer()
+		
+		# we shouldn't follow a link if the user has selected something
+		try:
+			start, end = buffer.get_selection_bounds()
+		except ValueError:
+			# If there is nothing selected, None is return
+			pass
+		else:
+			if start.get_offset() != end.get_offset():
+				return False
+		
+		x, y = text_view.window_to_buffer_coords(gtk.TEXT_WINDOW_WIDGET, int(event.x), int(event.y))
+		iter = text_view.get_iter_at_location(x, y)
+		
+		self.follow_if_link(text_view, iter)
+		return False
+	
+	# Update the cursor image if the pointer moved.
+	def histMotion(self, text_view, event):
+		#print "histMotion", text_view, event
+		x, y = text_view.window_to_buffer_coords(gtk.TEXT_WINDOW_WIDGET,
+			int(event.x), int(event.y))
+		self.set_cursor_if_appropriate(text_view, x, y)
+		text_view.window.get_pointer()
+		return False
+	
+	# Also update the cursor image if the window becomes visible
+	# (e.g. when a window covering it got iconified).
+	def histVisible(self, text_view, event):
+		#print "histVisible", text_view, event
+		wx, wy, mod = text_view.window.get_pointer()
+		bx, by = text_view.window_to_buffer_coords(gtk.TEXT_WINDOW_WIDGET, wx, wy)
+		
+		self.set_cursor_if_appropriate (text_view, bx, by)
+		return False
+	
+	# Looks at all tags covering the position (x, y) in the text view,
+	# and if one of them is a link, change the cursor to the "hands" cursor
+	# typically used by web browsers.
+	def set_cursor_if_appropriate(self, text_view, x, y):
+		hovering = False
+
+		buffer = text_view.get_buffer()
+		iter = text_view.get_iter_at_location(x, y)
+
+		tags = iter.get_tags()
+		for tag in tags:
+			page = tag.get_data("page")
+			if page != 0:
+				hovering = True
+				break
+		
+		if hovering != self.hovering_over_link:
+			self.hovering_over_link = hovering
+		
+		if self.hovering_over_link:
+			text_view.get_window(gtk.TEXT_WINDOW_TEXT).set_cursor(self.hand_cursor)
+		else:
+			text_view.get_window(gtk.TEXT_WINDOW_TEXT).set_cursor(self.regular_cursor)
+	
+	def follow_if_link(self, text_view, iter):
+		"""
+		Looks at all tags covering the position of iter in the text view,
+		and if one of them is a link, follow it by showing the page identified
+		by the data attached to it.
+		"""
+		tags = iter.get_tags()
+		for tag in tags:
+			href = tag.get_data("href")
+			if href is not None:
+				self.url_handler(href)
+				break
 	
 	def present(self):
 		self.wSubIM.present()
@@ -518,6 +640,12 @@ class MainWindow(object):
 		dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0, dt.tzinfo)
 		return u"[%s] " % unicode(dt)
 	
+	def url_handler(self, href):
+		"""
+		Handles URLs clicked in the history view.
+		"""
+		webbrowser.open(href)
+	
 	_first = True
 	def __addText(self, list):
 		buf = self.tvHistory.get_buffer()
@@ -528,7 +656,16 @@ class MainWindow(object):
 			if attrs is None:
 				buf.insert(buf.get_bounds()[1], txt)
 			else:
+				# href is a special attribute indicating links
+				href=None
+				if 'href' in attrs:
+					attrs = attrs.copy()
+					href = attrs['href']
+					del attrs['href']
+					attrs.update(LINK_PROPERTIES)
 				ut = buf.create_tag(**dict(attrs))
+				if href is not None:
+					ut.set_data('href', href)
 				buf.insert_with_tags(buf.get_bounds()[1], txt, ut)
 		self.setUrgent()
 		self.scrollDown()
@@ -536,8 +673,8 @@ class MainWindow(object):
 	def addMessage(self, time, user, msg):
 		self.__addText([
 			(self.getTime(time)+user+":", dict(foreground=getColorForUser(user))),
-			(" "+msg.strip(), None),
-		])
+			(" ", None),
+		]+list(divideByUrls(msg.strip())))
 	
 	def addNotice(self, time, user, msg):
 		"""
@@ -545,15 +682,15 @@ class MainWindow(object):
 		"""
 		self.__addText([
 			(self.getTime(time), None),
-			(user+" "+msg.strip(), dict(weight=pango.WEIGHT_BOLD)),
-		])
+			(user+" ", dict(weight=pango.WEIGHT_BOLD)),
+		]+list(divideByUrls(msg.strip(), dict(weight=pango.WEIGHT_BOLD))))
 	
 	def addAction(self, time, user, msg):
 		self.__addText([
 			(self.getTime(time), dict(foreground=getColorForUser(user))),
 			("***"+user, dict(weight=pango.WEIGHT_BOLD,foreground=getColorForUser(user))),
-			(" "+msg.strip(), None),
-		])
+			(" ", None),
+		]+list(divideByUrls(msg.strip())))
 	
 
 if __name__ == '__main__':
