@@ -68,6 +68,7 @@ David, for putting up with me.
 Various IRC channels, for putting up with my (sometimes n00bish) questions.
 PyGTK & Glade, for making this a little bit easier.
 xchat-gnome, for lending me the speech bubble from their icon.
+All the testers.
 """
 
 _hostname = None
@@ -326,7 +327,10 @@ def identifyUrls(txt):
 	"""
 	A generator, yielding (start,end) of URLs found.
 	"""
-	URL = re.compile(ur"""([a-zA-Z][a-zA-Z0-9+-.]*?:[\w:/?#\[\]@!*$&'()*+,;=.~\-%]+)""", re.I|re.U) #
+	# The email half of this is from http://www.regular-expressions.info/email.html
+	URL = re.compile(
+		ur"""([A-Z][A-Z0-9+-.]*?:[\w:/?#\[\]@!*$&'()*+,;=.~\-%]+|[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z]{2,4})"""
+		, re.I|re.U)
 	for m in URL.finditer(txt):
 		print "Found:", m.group(0)
 		yield m.start(1), m.end(1)
@@ -344,14 +348,23 @@ def divideByUrls(txt,tag={}):
 	if len(txt) > 0:
 		parts.append(txt)
 	for i, p in enumerate(parts):
-		ht = tag.copy()
-		ht['href']=p
 		if i % 2 == 0:
 			# Plain
 			yield p,tag
 		else:
 			# URL
+			ht = tag.copy()
+			ht['href']=p
+			if '@' in p and ':' not in p:
+				ht['href'] = 'mailto:'+p
 			yield p,ht
+
+def url_handler(href):
+	"""
+	Handles URLs.
+	"""
+	#FIXME: skip the web browser and just go for the system-specific registration system
+	webbrowser.open(href)
 
 class MainWindow(object):
 	def __listWidgets(self, root):
@@ -639,12 +652,6 @@ class MainWindow(object):
 	def getTime(self, dt):
 		dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0, dt.tzinfo)
 		return u"[%s] " % unicode(dt)
-	
-	def url_handler(self, href):
-		"""
-		Handles URLs clicked in the history view.
-		"""
-		webbrowser.open(href)
 	
 	_first = True
 	def __addText(self, list):
