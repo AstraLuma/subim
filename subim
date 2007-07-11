@@ -581,7 +581,7 @@ class MainWindow(object):
 		for tag in tags:
 			href = tag.get_data("href")
 			if href is not None:
-				self.url_handler(href)
+				url_handler(href)
 				break
 	
 	def present(self):
