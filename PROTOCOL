@@ -1,0 +1,59 @@
+This describes the protocol used by SubIM.
+
+SubIM uses UDP/IPv4 and multicast for communication. Because of this, there is 
+no need for servers, either manual or automatic. If you want something that has
+full IM features, use Bonjour.
+
+The protocol is a simple message-broadcast approach. All integers are in network 
+byte order (ie big endian) and all strings are in UTF-8.
+
+The basic packet is:
+ <CMD> <ARGUMENT> ...
+* <CMD> is an unsigned 16-bit integer telling you the command/type of packet
+* <ARGUMENT> is a counted blob: an unsigned 32-bit integer (the length) 
+  followed by the data. The data is usually an UTF-8 string, but you may send 
+  binary data as well, depending on the command.
+* ... is more arguments.
+The number of arguments is determined by the actual command and the length of 
+the packet (I don't yet provide for packet splitting).
+
+The first <ARGUMENT> is the name of the user/host that is sending the command.
+
+The current implementation will toss data instead of reading an incomplete 
+argument.
+
+There is no protocol initialization. The client simply has to bootstrap its 
+connection (eg subscribe to the multicast group) and it may send any packet at 
+any time.
+
+There are currently 4 commands:
+== 0 - CMD_MESSAGE ==
+ 0 <USER:STRING> <MESSAGE:STRING>
+The given user has sent a message to the chat.
+
+By convention, messages starting with "/me" are action messages a la IRC. The 
+client may choose to handle these (or other specially formatted messages) 
+specially.
+
+Note that it is valid to send a CMD_MESSAGE without ever sending or handling any
+other commands.
+
+== 1 - CMD_USER_JOIN ==
+ 1 <USER:STRING>
+This message indicates that a user is present in the chat and is actively 
+listening. It should be sent on initialization and in response to a 
+CMD_LIST_USERS.
+
+== 2 - CMD_USER_PART ==
+ 2 <USER:STRING>
+This message indicates that a user is leaving and will no longer receive 
+messages, although the exact timing between when this message is sent and when 
+the client ceases to receive messages is immaterial. A client should send this 
+when exiting.
+
+== 3 - CMD_LIST_USERS ==
+ 3 <USER:STRING>
+This is a request for the current user list. A client sends this when it wants 
+to update its list of currently listening clients. Upon receiving this, a 
+CMD_USER_JOIN should be sent.
+

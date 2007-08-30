@@ -217,12 +217,14 @@ class Protocol(object):
 		while len(d) >= alen:
 			l, = struct.unpack(ARGUMENT_FORMAT, d[:alen])
 			d = d[alen:]
+			# FIXME: Handle blobs
 			args.append(self.__decode( d[:l] ))
 			d = d[l:]
 		if len(d):
 			print "Warning: Leftover data: ", repr(d)
 		if len(args) < 1:
 			print "Warning: No user found"
+			user = None
 		else:
 			user = args[0]
 			args = args[1:]
@@ -232,7 +234,7 @@ class Protocol(object):
 		timestamp, src, cmd, user, args = self.__readPacket()
 		print "readOne:", src, cmd, user, args
 		if cmd in self.COMMANDS:
-			gobject.idle_add(self.COMMANDS[cmd],self, timestamp, src, user, *args)
+			self.COMMANDS[cmd](self, timestamp, src, user, *args)
 	
 	def readForever(self):
 		print "Start reading"
@@ -727,9 +729,9 @@ if __name__ == '__main__':
 		global app
 		app.rmUser(time, user)
 	
-	protocol.joiners.append(userJoined)
-	protocol.parters.append(userParted)
-	protocol.msgers.append(msgRecv)
+	protocol.joiners.append((lambda *p: gobject.idle_add(userJoined, *p)))
+	protocol.parters.append((lambda *p: gobject.idle_add(userParted, *p)))
+	protocol.msgers.append((lambda *p: gobject.idle_add(msgRecv, *p)))
 	
 	protocol.startReading()
 	
