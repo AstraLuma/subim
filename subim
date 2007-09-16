@@ -33,6 +33,7 @@ import gtk.glade
 import pango
 import os, sys, socket, struct, threading
 import traceback, datetime, re, webbrowser
+import logging
 
 # These 4 variables are settings, you may configure them as you wish.
 
@@ -40,7 +41,7 @@ import traceback, datetime, re, webbrowser
 # The mcast.py demo uses 225.0.0.250, which is part of a reserved block
 # The link scope is 239.255.0.0/16, the organization scope is 239.192.0.0/14
 # I'm going to use the former, with the last 2 bytes being map(ord, 'SI'), 
-# SI = SubIM, or 239.255.83.73
+# SI = SubIM, or 239.255.83.73; this should work for home networks
 SUBIM_GROUP = '239.255.83.73'
 # Set this to the number of hops packets can take. 1 is fine for most homes,
 # Organizations or other more complex setups may need higher numbers.
@@ -71,8 +72,48 @@ xchat-gnome, for lending me the speech bubble from their icon.
 All the testers.
 """
 
+logging.basicConfig(level=logging.INFO,
+                    format='[%(asctime)s] %(name)s:%(levelname)s: %(message)s',
+                    filename='/dev/stdout',
+                    filemode='w')
+
+def _getstack():
+	"""
+	Internal function to get a stack. Returns the stack object as-is, less this
+	function.
+	This is potentially a memory hog, so avoid if possible.
+	"""
+	try:
+		raise ZeroDivisionError
+	except ZeroDivisionError:
+		f = sys.exc_info()[2].tb_frame.f_back
+	return f
+
+def log(level, where, msg, *pargs, **kwargs):
+	if where is None:
+		where = 'subim'
+	else:
+		where = 'subim.'+where
+	logging.getLogger(where).log(level, msg, *pargs, **kwargs)
+
+def debug(*p,**kw):
+	log(logging.DEBUG,*p,**kw)
+
+def info(*p,**kw):
+	log(logging.INFO,*p,**kw)
+
+def warning(*p,**kw):
+	log(logging.WARNING,*p,**kw)
+
+def error(*p,**kw):
+	log(logging.ERROR,*p,**kw)
+
 _hostname = None
 def getHost():
+	"""
+	Returns this machine's hostname. This is used to determine the name to send
+	with commands.
+	"""
 	global _hostname
 	if _hostname is None:
 		_hostname = unicode(socket.gethostname())
@@ -148,7 +189,7 @@ class Protocol(object):
 	# SENDING #
 	def __send(self, cmd, *args):
 		args = map(unicode, args)
-		print "Protocol.__send", cmd, args
+		debug("Protocol.__send", "%r %r", cmd, args)
 		data = struct.pack(HEADER_FORMAT, cmd)
 		args = [getHost()] + args # Prefix the username to the args
 		for a in args:
@@ -158,37 +199,37 @@ class Protocol(object):
 		self.ssock.sendto(data, (SUBIM_GROUP, SUBIM_PORT))
 	
 	def sendMessage(self, msg):
-		print "Protocol.sendMessage", msg
+		debug("Protocol.sendMessage","%r", msg)
 		self.__send(CMD_MESSAGE, msg)
 	
 	def listUsers(self):
-		print "Protocol.listUsers"
+		debug("Protocol.listUsers", "entry")
 		#self.userJoin(getHost()) Shouldn't be needed, we'll reply to our own list
 		self.__send(CMD_LIST_USERS)
 	
 	def join(self):
-		print "Protocol.join"
+		debug("Protocol.join", "entry")
 		self.__send(CMD_USER_JOIN)
 		self.joined = True
 	
 	def part(self):
-		print "Protocol.part"
+		debug("Protocol.part", "entry")
 		self.joined = False
 		self.__send(CMD_USER_PART)
 	
 	# RECEIVING #
 	def recieveMessage(self, timestamp, src, user, msg):
-		print "Protocol.recieveMessage", user, msg
+		debug("Protocol.recieveMessage","%r %r", user, msg)
 		for c in self.msgers:
 			if callable(c): c(timestamp, user, msg)
 	
 	def userJoin(self, timestamp, src, user):
-		print "Protocol.userJoin", user
+		debug("Protocol.userJoin","%r", user)
 		for c in self.joiners:
 			if callable(c): c(timestamp, user)
 	
 	def userPart(self, timestamp, src, user):
-		print "Protocol.userPart", user
+		debug("Protocol.userPart","%r", user)
 		for c in self.parters:
 			if callable(c): c(timestamp, user)
 		# If they're using the same name, send out a join message (we're still here)
@@ -209,7 +250,7 @@ class Protocol(object):
 		dlen = struct.calcsize(HEADER_FORMAT)
 		d,src = self.rsock.recvfrom(4096)
 		timestamp = datetime.datetime.now()
-		#print "__readPacket:", repr(d),src
+		debug("Protocol.__readPacket","%r %s",d,src)
 		cmd, = struct.unpack(HEADER_FORMAT, d[:dlen])
 		d = d[dlen:]
 		args = []
@@ -221,9 +262,9 @@ class Protocol(object):
 			args.append(self.__decode( d[:l] ))
 			d = d[l:]
 		if len(d):
-			print "Warning: Leftover data: ", repr(d)
+			warning("Protocol.__readPacket","Leftover data: %r", d)
 		if len(args) < 1:
-			print "Warning: No user found"
+			warning("Protocol.__readPacket","No user found")
 			user = None
 		else:
 			user = args[0]
@@ -232,17 +273,17 @@ class Protocol(object):
 	
 	def readOne(self):
 		timestamp, src, cmd, user, args = self.__readPacket()
-		print "readOne:", src, cmd, user, args
+		debug("Protocol.readOne","%r %r %r %r", src, cmd, user, args)
 		if cmd in self.COMMANDS:
 			self.COMMANDS[cmd](self, timestamp, src, user, *args)
 	
 	def readForever(self):
-		print "Start reading"
+		info("Protocol.readForever","Start reading")
 		while True:
 			try:
 				self.readOne()
 			except Exception, err:
-				print type(err), err
+				debug("Protocol.readForever","%s %s", type(err), err)
 				traceback.print_exc()
 	
 	def startReading(self):
@@ -321,7 +362,7 @@ def resource(fn,sec="share"):
 				return f
 		except: pass
 	else:
-		print >> sys.stderr, "Couldn't find ", repr(fn)
+		error("resource","Couldn't find resource %r", fn)
 		return fn #Can't actually find it
 
 def identifyUrls(txt):
@@ -333,7 +374,7 @@ def identifyUrls(txt):
 		ur"""([A-Z][A-Z0-9+-.]*?:[\w:/?#\[\]@!*$&'()*+,;=.~\-%]+|[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z]{2,4})"""
 		, re.I|re.U)
 	for m in URL.finditer(txt):
-		print "Found:", m.group(0)
+		debug("identifyUrls", "Found: %s", m.group(0))
 		yield m.start(1), m.end(1)
 
 def divideByUrls(txt,tag={}):
@@ -380,7 +421,7 @@ class MainWindow(object):
 		for c in root.get_children():
 			n = gtk.glade.get_widget_name(c)
 			if n is None: 
-				print "Not a Glade widget:", c
+				debug("MainWindow.__listWidgets", "Not a Glade widget: %r", c)
 				continue # Wasn't an XML child
 			setattr(self, n, c)
 			self.__listWidgets(c)
@@ -432,7 +473,7 @@ class MainWindow(object):
 		try:
 			self.wSubIM.set_property('urgency-hint', False) #GTK 2.6
 		except Exception, err:
-			print type(err), err
+			error("MainWindow.clearUrgent", "%s %s",type(err), err)
 	
 	def statusActivate(self, icon):
 		if self.siIcon is None:
@@ -473,7 +514,7 @@ class MainWindow(object):
 			try:
 				ad.set_property(k,v)
 			except Exception, err:
-				print type(err), err
+				error("MainWindow.ShowAbout", "%s %s",type(err), err)
 		def resp(dlg, r):
 			if r in [gtk.RESPONSE_OK, gtk.RESPONSE_CANCEL, gtk.RESPONSE_CLOSE, 
 					gtk.RESPONSE_YES, gtk.RESPONSE_NO]:
@@ -488,12 +529,12 @@ class MainWindow(object):
 		gtk.main_quit()
 	
 	def statusPopup(self, icon, button, time):
-		print "statusPopup", icon, button, time
+		debug("MainWindow.statusPopup","%s %s %s %s", icon, button, time)
 		self.mStatusPopup.popup(None, None, gtk.status_icon_position_menu, \
 		                        button, time, icon)
 	
 	def winDelete(self, widget, event):
-		print "winDelete", widget, event
+		debug("MainWindow.winDelete","%s %s", widget, event)
 		if self.siIcon is None:
 			self.QuitApp()
 		else:
@@ -602,18 +643,18 @@ class MainWindow(object):
 	def getMessageText(self):
 		buf = self.tvMessage.get_buffer()
 		rv = buf.get_text(*buf.get_bounds())
-		print "getMessageText:rv", type(rv), repr(rv)
+		debug("MainWindow.getMessageText","rv %s %s", type(rv), repr(rv))
 		return unicode(rv, 'utf8', 'ignore')
 	
 	def sendMessage(self, *p, **kw):
-		print "sendMessage", p, kw
+		debug("MainWindow.sendMessage","%s %s", p, kw)
 		protocol.sendMessage(self.getMessageText())
 		# Clear the input
 		buf = self.tvMessage.get_buffer()
 		buf.delete(*buf.get_bounds())
 	
 	def addUser(self, time, userName):
-		print "addUser", userName
+		debug("MainWindow.addUser","%s", userName)
 		if userName not in self.userlist:
 			self.userlist.append(userName)
 			self.addNotice(time, userName, "joined")
@@ -621,7 +662,7 @@ class MainWindow(object):
 			assert self.tvUsers.get_model() is self.umodel
 	
 	def rmUser(self, time, userName):
-		print "rmUser", userName
+		debug("MainWindow.rmUser","%s", userName)
 		if userName in self.userlist:
 			i = self.userlist.index(userName)
 			del self.userlist[i]
@@ -651,7 +692,7 @@ class MainWindow(object):
 		"""
 		#FIXME: Sometimes, this causes the text to disappear
 		va = self.swHistory.get_vadjustment()
-		print "va:", va.lower, va.value, va.upper, va.page_size
+		debug("MainWindow.scrollDown","va: %s %s %s %s", va.lower, va.value, va.upper, va.page_size)
 		va.set_value(va.upper)
 	
 	def getTime(self, dt):
@@ -713,7 +754,7 @@ class MainWindow(object):
 
 if __name__ == '__main__':
 	app = MainWindow(resource('subim.glade'))
-	print repr(app)
+	debug(None,repr(app))
 	protocol = Protocol()
 	
 	def msgRecv(time, user, msg):
@@ -729,9 +770,9 @@ if __name__ == '__main__':
 		global app
 		app.rmUser(time, user)
 	
-	protocol.joiners.append((lambda *p: gobject.idle_add(userJoined, *p)))
-	protocol.parters.append((lambda *p: gobject.idle_add(userParted, *p)))
-	protocol.msgers.append((lambda *p: gobject.idle_add(msgRecv, *p)))
+	protocol.joiners.append(lambda *p: gobject.idle_add(userJoined, *p))
+	protocol.parters.append(lambda *p: gobject.idle_add(userParted, *p))
+	protocol.msgers.append(lambda *p: gobject.idle_add(msgRecv, *p))
 	
 	protocol.startReading()
 	

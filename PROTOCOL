@@ -57,3 +57,5 @@ This is a request for the current user list. A client sends this when it wants
 to update its list of currently listening clients. Upon receiving this, a 
 CMD_USER_JOIN should be sent.
 
+== On nicks/user names/host names ==
+There is no assurance that the user name one client uses will be unique.

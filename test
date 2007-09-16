@@ -16,15 +16,23 @@ MYGROUP = subim.SUBIM_GROUP
 import sys
 import time
 import struct
+from subim import Protocol
 from socket import *
-import random
-random.seed()
 
+def getHost():
+	return "testerd"
+subim.getHost = getHost
 
 # Main program
 def main():
     flags = sys.argv[1:]
-    #
+    if '-r' in flags:
+        flags.remove('-r')
+        sender = sender_raw
+        receiver = receiver_raw
+    else:
+        sender = sender_new
+        receiver = receiver_new
     print "Port: ", MYPORT
     print "Group: ", MYGROUP
     if flags:
@@ -34,7 +42,14 @@ def main():
 
 
 # Sender subroutine (only one per local area network)
-def sender(flag):
+def sender_new(flag):
+    proto = Protocol()
+    while 1:
+        data = repr(time.time())
+        proto.sendMessage(data)
+        time.sleep(2)
+
+def sender_raw(flag):
     s = socket(AF_INET, SOCK_DGRAM)
     if flag == '-b':
         s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
@@ -48,9 +63,22 @@ def sender(flag):
         s.sendto(data, (mygroup, MYPORT))
         time.sleep(2)
 
-
 # Receiver subroutine (as many as you like)
-def receiver():
+def receiver_new():
+    # Open and initialize the socket
+#    s = openmcastsock(MYGROUP, MYPORT)
+    #
+    # Loop, printing any data we receive
+#    while 1:
+#        data, sender = s.recvfrom(1500)
+#        print sender, ':', repr(data)
+    proto = Protocol()
+    def recv(time, user, msg):
+    	print user, ':', msg
+    proto.msgers.append(recv)
+    proto.readForever()
+
+def receiver_raw():
     # Open and initialize the socket
     s = openmcastsock(MYGROUP, MYPORT)
     #
