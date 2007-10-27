@@ -1,7 +1,7 @@
 This describes the protocol used by SubIM.
 
-SubIM uses UDP/IPv4 and multicast for communication. Because of this, there is 
-no need for servers, either manual or automatic. If you want something that has
+SubIM uses UDP/IPv4 multicast for communication. Because of this, there is no 
+need for servers, either manual or automatic. If you want something that has 
 full IM features, use Bonjour.
 
 The protocol is a simple message-broadcast approach. All integers are in network 
@@ -13,13 +13,13 @@ The basic packet is:
 * <ARGUMENT> is a counted blob: an unsigned 32-bit integer (the length) 
   followed by the data. The data is usually an UTF-8 string, but you may send 
   binary data as well, depending on the command.
-* ... is more arguments.
+* ... is more <ARGUMENT>'s.
 The number of arguments is determined by the actual command and the length of 
 the packet (I don't yet provide for packet splitting).
 
-The first <ARGUMENT> is the name of the user/host that is sending the command.
+The first <ARGUMENT> is the name of the user/host that is sending the command. 
 
-The current implementation will toss data instead of reading an incomplete 
+The current implementation will throw away data instead of reading an incomplete 
 argument.
 
 There is no protocol initialization. The client simply has to bootstrap its 
@@ -59,3 +59,12 @@ CMD_USER_JOIN should be sent.
 
 == On nicks/user names/host names ==
 There is no assurance that the user name one client uses will be unique.
+
+A client should make decent efforts to make sure its user name is unique.
+
+== Proprietary Commands ==
+The 8 most significant bits in the command number (bit mask 0xFF00) may be used 
+as a vendor identifier, and then other clients may implement proprietary 
+commands, as long as they fit within the constructs set out in this document. 
+Vendor identifiers 0x00-0x0F are reserved.
+
