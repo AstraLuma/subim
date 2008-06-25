@@ -1,8 +1,10 @@
 subim (0.0.6) unstable; urgency=low
 
-  * ...
+  * Fixed a bug dealing with URL handling.
+  * Documented the protocol.
+  * Some internal fixups and enhancements.
 
- -- James Bliss <james.bliss@astro73.com>  Tue, 11 June 2007 12:00:00 -0400
+ -- James Bliss <james.bliss@astro73.com>  Thu, 5 June 2008 1:00:00 -0400
 
 subim (0.0.5) unstable; urgency=low
 
