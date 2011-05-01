@@ -2,3 +2,5 @@
 *.pyo
 *-stamp
 
+build
+*-stamp

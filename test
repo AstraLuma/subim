@@ -1,6 +1,6 @@
 #!/usr/bin/python
-import subim
 
+import astroim
 # Send/receive UDP multicast packets.
 # Requires that your OS kernel supports IP multicast.
 # This is built-in on SGI, still optional for most other vendors.
@@ -10,18 +10,17 @@ import subim
 #   mcast -b (sender, using broadcast instead multicast)
 #   mcast    (receivers)
 
-MYPORT = subim.SUBIM_PORT
-MYGROUP = subim.SUBIM_GROUP
+MYPORT = astroim.SUBIM_PORT
+MYGROUP = astroim.SUBIM_GROUP
 
 import sys
 import time
 import struct
-from subim import Protocol
+from astroim import Protocol
 from socket import *
 
 def getHost():
 	return "testerd"
-subim.getHost = getHost
 
 # Main program
 def main():
@@ -43,7 +42,7 @@ def main():
 
 # Sender subroutine (only one per local area network)
 def sender_new(flag):
-    proto = Protocol()
+    proto = Protocol(getHost())
     while 1:
         data = repr(time.time())
         proto.sendMessage(data)
@@ -72,7 +71,7 @@ def receiver_new():
 #    while 1:
 #        data, sender = s.recvfrom(1500)
 #        print sender, ':', repr(data)
-    proto = Protocol()
+    proto = Protocol(getHost())
     def recv(time, user, msg):
     	print user, ':', msg
     proto.msgers.append(recv)

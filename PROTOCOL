@@ -57,6 +57,22 @@ This is a request for the current user list. A client sends this when it wants
 to update its list of currently listening clients. Upon receiving this, a 
 CMD_USER_JOIN should be sent.
 
+== 4 - CMD_APP_MESSAGE ==
+ 4 <USER:STRING> <APP:STRING> <MSG:BLOB>
+Similar to CMD_MESSAGE. To be used between applications for syncronization and 
+such, in an easily extensible way.
+
+It is suggested that the MSG parameter starts with a command name, followed by 
+a space, followed by additional data, and that simple data (like numbers) be 
+converted to string form.
+
+== Other commands ==
+Any command not understood by a particular client may be safely ignored. 
+Vendors are required to make a best effort to not break the protocol outlined 
+in this document with proprietary commands. (eg, a proprietary 
+CMD_CHANGE_ENCODING would not be allowed because clients that didn't implement 
+this would then receive garbage after the encoding change.)
+
 == On nicks/user names/host names ==
 There is no assurance that the user name one client uses will be unique.
 

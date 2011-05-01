@@ -34,6 +34,7 @@ import pango
 import os, sys, socket, struct, threading
 import traceback, datetime, re, webbrowser
 import logging
+from astroim import Protocol
 
 # These 4 variables are settings, you may configure them as you wish.
 
@@ -62,8 +63,8 @@ LINK_PROPERTIES = {
 }
 
 __author__ = "James Bliss <astronouth7303@gmail.com>"
-__date__ = """$Date$"""
-__version__ = """$Revision$"""
+__date__ = """$Date: 2007-09-16 15:49:47 -0400 (Sun, 16 Sep 2007) $"""
+__version__ = """$Revision: 46 $"""
 __credits__ = """Cuog, for helping me test.
 David, for putting up with me.
 Various IRC channels, for putting up with my (sometimes n00bish) questions.
@@ -118,184 +119,6 @@ def getHost():
 	if _hostname is None:
 		_hostname = unicode(socket.gethostname())
 	return _hostname
-
-
-def openmcastsock(group, port):
-	"""
-	Open a UDP socket, bind it to a port and select a multicast group
-	Borrowed from the Python demos.
-	"""
-	#
-	# Create a socket
-	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	#
-	# Allow multiple copies of this program on one machine
-	# (not strictly needed)
-	s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	#
-	# Bind it to the port
-	s.bind(('', port))
-	#
-	# Look up multicast group address in name server
-	# (doesn't hurt if it is already in ddd.ddd.ddd.ddd format)
-	group = socket.gethostbyname(group)
-	#
-	# Construct binary group address
-	bytes = map(int, group.split("."))
-	grpaddr = 0
-	for byte in bytes: grpaddr = (grpaddr << 8) | byte
-	#
-	# Construct struct mreq from grpaddr and ifaddr
-	ifaddr = socket.INADDR_ANY
-	mreq = struct.pack('ll', socket.htonl(grpaddr), socket.htonl(ifaddr))
-	#
-	# Add group membership
-	s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-	#
-	return s
-
-HEADER_FORMAT = "!H"
-ARGUMENT_FORMAT = "!L"
-
-CMD_MESSAGE = 0
-CMD_USER_JOIN = 1 # Also used as the response for a user list request
-CMD_USER_PART = 2
-CMD_LIST_USERS = 3
-
-class Protocol(object):
-	rsock = None
-	ssock = None
-	
-	joiners = []
-	parters = []
-	msgers = []
-	joined = False
-	
-	def __init__(self):
-		# Sending stuff
-		self.ssock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
-		ttl = struct.pack('b', SUBIM_TTL) # Time-to-live
-		self.ssock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-		# Receiving stuff
-		self.rsock = openmcastsock(SUBIM_GROUP, SUBIM_PORT)
-		self.joined = False
-	
-	def __encode(self, uni):
-		return unicode(uni).encode('utf8', 'ignore') # We really shouldn't get anything
-	
-	def __decode(self, data):
-		return unicode(data, 'utf8', 'ignore')
-	
-	# SENDING #
-	def __send(self, cmd, *args):
-		args = map(unicode, args)
-		debug("Protocol.__send", "%r %r", cmd, args)
-		data = struct.pack(HEADER_FORMAT, cmd)
-		args = [getHost()] + args # Prefix the username to the args
-		for a in args:
-			d = self.__encode(a)
-			data += struct.pack(ARGUMENT_FORMAT, len(d))
-			data += d
-		self.ssock.sendto(data, (SUBIM_GROUP, SUBIM_PORT))
-	
-	def sendMessage(self, msg):
-		debug("Protocol.sendMessage","%r", msg)
-		self.__send(CMD_MESSAGE, msg)
-	
-	def listUsers(self):
-		debug("Protocol.listUsers", "entry")
-		#self.userJoin(getHost()) Shouldn't be needed, we'll reply to our own list
-		self.__send(CMD_LIST_USERS)
-	
-	def join(self):
-		debug("Protocol.join", "entry")
-		self.__send(CMD_USER_JOIN)
-		self.joined = True
-	
-	def part(self):
-		debug("Protocol.part", "entry")
-		self.joined = False
-		self.__send(CMD_USER_PART)
-	
-	# RECEIVING #
-	def recieveMessage(self, timestamp, src, user, msg):
-		debug("Protocol.recieveMessage","%r %r", user, msg)
-		for c in self.msgers:
-			if callable(c): c(timestamp, user, msg)
-	
-	def userJoin(self, timestamp, src, user):
-		debug("Protocol.userJoin","%r", user)
-		for c in self.joiners:
-			if callable(c): c(timestamp, user)
-	
-	def userPart(self, timestamp, src, user):
-		debug("Protocol.userPart","%r", user)
-		for c in self.parters:
-			if callable(c): c(timestamp, user)
-		# If they're using the same name, send out a join message (we're still here)
-		if user == getHost() and self.joined:
-			self.join()
-	
-	def __reply2list(self, timestamp, src, user):
-		self.__send(CMD_USER_JOIN)
-	
-	COMMANDS = {
-		CMD_MESSAGE : recieveMessage,
-		CMD_USER_JOIN : userJoin,
-		CMD_USER_PART : userPart,
-		CMD_LIST_USERS : __reply2list,
-	}
-	
-	def __readPacket(self):
-		dlen = struct.calcsize(HEADER_FORMAT)
-		d,src = self.rsock.recvfrom(4096)
-		timestamp = datetime.datetime.now()
-		debug("Protocol.__readPacket","%r %s",d,src)
-		cmd, = struct.unpack(HEADER_FORMAT, d[:dlen])
-		d = d[dlen:]
-		args = []
-		alen = struct.calcsize(ARGUMENT_FORMAT)
-		while len(d) >= alen:
-			l, = struct.unpack(ARGUMENT_FORMAT, d[:alen])
-			d = d[alen:]
-			# FIXME: Handle blobs
-			args.append(self.__decode( d[:l] ))
-			d = d[l:]
-		if len(d):
-			warning("Protocol.__readPacket","Leftover data: %r", d)
-		if len(args) < 1:
-			warning("Protocol.__readPacket","No user found")
-			user = None
-		else:
-			user = args[0]
-			args = args[1:]
-		return timestamp, src, cmd, user, args
-	
-	def readOne(self):
-		timestamp, src, cmd, user, args = self.__readPacket()
-		debug("Protocol.readOne","%r %r %r %r", src, cmd, user, args)
-		if cmd in self.COMMANDS:
-			self.COMMANDS[cmd](self, timestamp, src, user, *args)
-	
-	def readForever(self):
-		info("Protocol.readForever","Start reading")
-		while True:
-			try:
-				self.readOne()
-			except Exception, err:
-				debug("Protocol.readForever","%s %s", type(err), err)
-				traceback.print_exc()
-	
-	def startReading(self):
-		t = threading.Thread(target=self.readForever, name="SocketReader")
-		t.setDaemon(True)
-		t.start()
-	
-	def __enter__(self):
-		self.join()
-	
-	def __exit__(self, exc_type=None, exc_value=None, traceback=None):
-		self.part()
 
 def hsl(H,S,L):
 	"""
@@ -755,7 +578,7 @@ class MainWindow(object):
 if __name__ == '__main__':
 	app = MainWindow(resource('subim.glade'))
 	debug(None,repr(app))
-	protocol = Protocol()
+	protocol = Protocol(getHost(), group=SUBIM_GROUP, port=SUBIM_PORT)
 	
 	def msgRecv(time, user, msg):
 		global app

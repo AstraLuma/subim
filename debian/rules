@@ -65,6 +65,7 @@ install: build
 	install -m644 $(CURDIR)/debian/desktop $(CURDIR)/debian/subim/usr/share/app-install/desktop/subim.desktop
 	install -m644 $(CURDIR)/subim.svg $(CURDIR)/debian/subim/usr/share/app-install/icons
 	install -m644 $(CURDIR)/subim.svg $(CURDIR)/debian/subim/usr/share/pixmaps
+	install -m644 $(CURDIR)/astroim.py $(CURDIR)/debian/python-astroim/usr/bin
 	
 
 
